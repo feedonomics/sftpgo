@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"path"
+	"strings"
 	"time"
 
 	"github.com/pkg/sftp"
@@ -12,6 +13,7 @@ import (
 	"github.com/drakkan/sftpgo/common"
 	"github.com/drakkan/sftpgo/dataprovider"
 	"github.com/drakkan/sftpgo/logger"
+	"github.com/drakkan/sftpgo/utils"
 	"github.com/drakkan/sftpgo/vfs"
 )
 
@@ -24,6 +26,8 @@ type Connection struct {
 	RemoteAddr net.Addr
 	channel    io.ReadWriteCloser
 	command    string
+	// root folder prefix to add/remove prefix to/from request file paths
+	folderPrefix string
 }
 
 // GetClientVersion returns the connected client's version
@@ -45,16 +49,21 @@ func (c *Connection) GetCommand() string {
 func (c *Connection) Fileread(request *sftp.Request) (io.ReaderAt, error) {
 	c.UpdateLastActivity()
 
-	if !c.User.HasPerm(dataprovider.PermDownload, path.Dir(request.Filepath)) {
+	if !c.containsFolderPrefix(request.Filepath) {
+		return nil, c.GetNotExistError()
+	}
+
+	virtualPath := c.removeFolderPrefix(request.Filepath)
+	if !c.User.HasPerm(dataprovider.PermDownload, path.Dir(virtualPath)) {
 		return nil, sftp.ErrSSHFxPermissionDenied
 	}
 
-	if !c.User.IsFileAllowed(request.Filepath) {
-		c.Log(logger.LevelWarn, "reading file %#v is not allowed", request.Filepath)
+	if !c.User.IsFileAllowed(virtualPath) {
+		c.Log(logger.LevelWarn, "reading file %#v is not allowed", virtualPath)
 		return nil, sftp.ErrSSHFxPermissionDenied
 	}
 
-	p, err := c.Fs.ResolvePath(request.Filepath)
+	p, err := c.Fs.ResolvePath(virtualPath)
 	if err != nil {
 		return nil, c.GetFsError(err)
 	}
@@ -65,7 +74,7 @@ func (c *Connection) Fileread(request *sftp.Request) (io.ReaderAt, error) {
 		return nil, c.GetFsError(err)
 	}
 
-	baseTransfer := common.NewBaseTransfer(file, c.BaseConnection, cancelFn, p, request.Filepath, common.TransferDownload,
+	baseTransfer := common.NewBaseTransfer(file, c.BaseConnection, cancelFn, p, virtualPath, common.TransferDownload,
 		0, 0, 0, false, c.Fs)
 	t := newTransfer(baseTransfer, nil, r, nil)
 
@@ -85,12 +94,17 @@ func (c *Connection) Filewrite(request *sftp.Request) (io.WriterAt, error) {
 func (c *Connection) handleFilewrite(request *sftp.Request) (sftp.WriterAtReaderAt, error) {
 	c.UpdateLastActivity()
 
-	if !c.User.IsFileAllowed(request.Filepath) {
-		c.Log(logger.LevelWarn, "writing file %#v is not allowed", request.Filepath)
+	if !c.containsFolderPrefix(request.Filepath) {
+		return nil, c.GetNotExistError()
+	}
+	virtualPath := c.removeFolderPrefix(request.Filepath)
+
+	if !c.User.IsFileAllowed(virtualPath) {
+		c.Log(logger.LevelWarn, "writing file %#v is not allowed", virtualPath)
 		return nil, sftp.ErrSSHFxPermissionDenied
 	}
 
-	p, err := c.Fs.ResolvePath(request.Filepath)
+	p, err := c.Fs.ResolvePath(virtualPath)
 	if err != nil {
 		return nil, c.GetFsError(err)
 	}
@@ -105,7 +119,7 @@ func (c *Connection) handleFilewrite(request *sftp.Request) (sftp.WriterAtReader
 		// read and write mode is only supported for local filesystem
 		errForRead = sftp.ErrSSHFxOpUnsupported
 	}
-	if !c.User.HasPerm(dataprovider.PermDownload, path.Dir(request.Filepath)) {
+	if !c.User.HasPerm(dataprovider.PermDownload, path.Dir(virtualPath)) {
 		// we can try to read only for local fs here, see above.
 		// os.ErrPermission will become sftp.ErrSSHFxPermissionDenied when sent to
 		// the client
@@ -114,10 +128,10 @@ func (c *Connection) handleFilewrite(request *sftp.Request) (sftp.WriterAtReader
 
 	stat, statErr := c.Fs.Lstat(p)
 	if (statErr == nil && stat.Mode()&os.ModeSymlink != 0) || c.Fs.IsNotExist(statErr) {
-		if !c.User.HasPerm(dataprovider.PermUpload, path.Dir(request.Filepath)) {
+		if !c.User.HasPerm(dataprovider.PermUpload, path.Dir(virtualPath)) {
 			return nil, sftp.ErrSSHFxPermissionDenied
 		}
-		return c.handleSFTPUploadToNewFile(p, filePath, request.Filepath, errForRead)
+		return c.handleSFTPUploadToNewFile(p, filePath, virtualPath, errForRead)
 	}
 
 	if statErr != nil {
@@ -131,23 +145,36 @@ func (c *Connection) handleFilewrite(request *sftp.Request) (sftp.WriterAtReader
 		return nil, sftp.ErrSSHFxOpUnsupported
 	}
 
-	if !c.User.HasPerm(dataprovider.PermOverwrite, path.Dir(request.Filepath)) {
+	if !c.User.HasPerm(dataprovider.PermOverwrite, path.Dir(virtualPath)) {
 		return nil, sftp.ErrSSHFxPermissionDenied
 	}
 
-	return c.handleSFTPUploadToExistingFile(request.Pflags(), p, filePath, stat.Size(), request.Filepath, errForRead)
+	return c.handleSFTPUploadToExistingFile(request.Pflags(), p, filePath, stat.Size(), virtualPath, errForRead)
 }
 
 // Filecmd hander for basic SFTP system calls related to files, but not anything to do with reading
 // or writing to those files.
 func (c *Connection) Filecmd(request *sftp.Request) error {
 	c.UpdateLastActivity()
+	if !c.containsFolderPrefix(request.Filepath) {
+		return c.GetNotExistError()
+	}
 
-	p, err := c.Fs.ResolvePath(request.Filepath)
+	// target of rename/symlink is not within prefix
+	var virtualTargetPath string
+	if request.Target != `` {
+		if !c.containsFolderPrefix(request.Target) {
+			return c.GetNotExistError()
+		}
+		virtualTargetPath = c.removeFolderPrefix(request.Target)
+	}
+	virtualPath := c.removeFolderPrefix(request.Filepath)
+
+	p, err := c.Fs.ResolvePath(virtualPath)
 	if err != nil {
 		return c.GetFsError(err)
 	}
-	target, err := c.getSFTPCmdTargetPath(request.Target)
+	target, err := c.getSFTPCmdTargetPath(virtualTargetPath)
 	if err != nil {
 		return c.GetFsError(err)
 	}
@@ -158,18 +185,18 @@ func (c *Connection) Filecmd(request *sftp.Request) error {
 	case "Setstat":
 		return c.handleSFTPSetstat(p, request)
 	case "Rename":
-		if err = c.Rename(p, target, request.Filepath, request.Target); err != nil {
+		if err = c.Rename(p, target, virtualPath, virtualTargetPath); err != nil {
 			return err
 		}
 	case "Rmdir":
-		return c.RemoveDir(p, request.Filepath)
+		return c.RemoveDir(p, virtualPath)
 	case "Mkdir":
-		err = c.CreateDir(p, request.Filepath)
+		err = c.CreateDir(p, virtualPath)
 		if err != nil {
 			return err
 		}
 	case "Symlink":
-		if err = c.CreateSymlink(p, target, request.Filepath, request.Target); err != nil {
+		if err = c.CreateSymlink(p, target, virtualPath, virtualTargetPath); err != nil {
 			return err
 		}
 	case "Remove":
@@ -185,62 +212,103 @@ func (c *Connection) Filecmd(request *sftp.Request) error {
 // a directory as well as perform file/folder stat calls.
 func (c *Connection) Filelist(request *sftp.Request) (sftp.ListerAt, error) {
 	c.UpdateLastActivity()
-	p, err := c.Fs.ResolvePath(request.Filepath)
-	if err != nil {
-		return nil, c.GetFsError(err)
+
+	// inside of the folder prefix bounds
+	if c.containsFolderPrefix(request.Filepath) {
+		virtualPath := c.removeFolderPrefix(request.Filepath)
+		p, err := c.Fs.ResolvePath(virtualPath)
+		if err != nil {
+			return nil, c.GetFsError(err)
+		}
+
+		switch request.Method {
+		case "List":
+			files, err := c.ListDir(p, virtualPath)
+			if err != nil {
+				return nil, err
+			}
+			return listerAt(files), nil
+
+		case "Stat":
+			if !c.User.HasPerm(dataprovider.PermListItems, path.Dir(virtualPath)) {
+				return nil, sftp.ErrSSHFxPermissionDenied
+			}
+
+			s, err := c.DoStat(p, 0)
+			if err != nil {
+				c.Log(logger.LevelDebug, "error running stat on path %#v: %+v", p, err)
+				return nil, c.GetFsError(err)
+			}
+
+			return listerAt([]os.FileInfo{s}), nil
+		case "Readlink":
+			if !c.User.HasPerm(dataprovider.PermListItems, path.Dir(virtualPath)) {
+				return nil, sftp.ErrSSHFxPermissionDenied
+			}
+
+			s, err := c.Fs.Readlink(p)
+			if err != nil {
+				c.Log(logger.LevelDebug, "error running readlink on path %#v: %+v", p, err)
+				return nil, c.GetFsError(err)
+			}
+
+			if !c.User.HasPerm(dataprovider.PermListItems, path.Dir(s)) {
+				return nil, sftp.ErrSSHFxPermissionDenied
+			}
+
+			return listerAt([]os.FileInfo{vfs.NewFileInfo(s, false, 0, time.Now(), true)}), nil
+
+		default:
+			return nil, sftp.ErrSSHFxOpUnsupported
+		}
 	}
 
+	// outside of the folder prefix bounds
 	switch request.Method {
-	case "List":
-		files, err := c.ListDir(p, request.Filepath)
-		if err != nil {
-			return nil, err
+	case `List`:
+		FileName := strings.TrimLeft(c.folderPrefix, request.Filepath)
+		SlashIndex := strings.Index(FileName, `/`)
+		if SlashIndex > 0 {
+			FileName = FileName[0:SlashIndex]
 		}
-		return listerAt(files), nil
-	case "Stat":
-		if !c.User.HasPerm(dataprovider.PermListItems, path.Dir(request.Filepath)) {
+
+		if !c.User.HasPerm(dataprovider.PermListItems, path.Dir(`/`)) {
 			return nil, sftp.ErrSSHFxPermissionDenied
 		}
 
-		s, err := c.DoStat(p, 0)
+		statPath, err := c.Fs.ResolvePath(`/`)
 		if err != nil {
-			c.Log(logger.LevelDebug, "error running stat on path %#v: %+v", p, err)
 			return nil, c.GetFsError(err)
 		}
 
-		return listerAt([]os.FileInfo{s}), nil
-	case "Readlink":
-		if !c.User.HasPerm(dataprovider.PermListItems, path.Dir(request.Filepath)) {
-			return nil, sftp.ErrSSHFxPermissionDenied
-		}
-
-		s, err := c.Fs.Readlink(p)
+		s, err := c.DoStat(statPath, 0)
 		if err != nil {
-			c.Log(logger.LevelDebug, "error running readlink on path %#v: %+v", p, err)
 			return nil, c.GetFsError(err)
 		}
 
-		if !c.User.HasPerm(dataprovider.PermListItems, path.Dir(s)) {
-			return nil, sftp.ErrSSHFxPermissionDenied
-		}
-
-		return listerAt([]os.FileInfo{vfs.NewFileInfo(s, false, 0, time.Now(), true)}), nil
-
-	default:
-		return nil, sftp.ErrSSHFxOpUnsupported
+		return listerAt([]os.FileInfo{
+			vfs.NewFileInfo(FileName, true, 0, s.ModTime(), true),
+		}), nil
 	}
+
+	return nil, sftp.ErrSSHFxOpUnsupported
 }
 
 // Lstat implements LstatFileLister interface
 func (c *Connection) Lstat(request *sftp.Request) (sftp.ListerAt, error) {
 	c.UpdateLastActivity()
 
-	p, err := c.Fs.ResolvePath(request.Filepath)
+	if !c.containsFolderPrefix(request.Filepath) {
+		return nil, c.GetNotExistError()
+	}
+
+	virtualPath := c.removeFolderPrefix(request.Filepath)
+	p, err := c.Fs.ResolvePath(virtualPath)
 	if err != nil {
 		return nil, c.GetFsError(err)
 	}
 
-	if !c.User.HasPerm(dataprovider.PermListItems, path.Dir(request.Filepath)) {
+	if !c.User.HasPerm(dataprovider.PermListItems, path.Dir(virtualPath)) {
 		return nil, sftp.ErrSSHFxPermissionDenied
 	}
 
@@ -268,6 +336,11 @@ func (c *Connection) getSFTPCmdTargetPath(requestTarget string) (string, error) 
 }
 
 func (c *Connection) handleSFTPSetstat(filePath string, request *sftp.Request) error {
+	if !c.containsFolderPrefix(request.Filepath) {
+		return c.GetNotExistError()
+	}
+	virtualPath := c.removeFolderPrefix(request.Filepath)
+
 	attrs := common.StatAttributes{
 		Flags: 0,
 	}
@@ -290,10 +363,15 @@ func (c *Connection) handleSFTPSetstat(filePath string, request *sftp.Request) e
 		attrs.Size = int64(request.Attributes().Size)
 	}
 
-	return c.SetStat(filePath, request.Filepath, &attrs)
+	return c.SetStat(filePath, virtualPath, &attrs)
 }
 
 func (c *Connection) handleSFTPRemove(filePath string, request *sftp.Request) error {
+	if !c.containsFolderPrefix(request.Filepath) {
+		return c.GetNotExistError()
+	}
+	virtualPath := c.removeFolderPrefix(request.Filepath)
+
 	var fi os.FileInfo
 	var err error
 	if fi, err = c.Fs.Lstat(filePath); err != nil {
@@ -305,7 +383,7 @@ func (c *Connection) handleSFTPRemove(filePath string, request *sftp.Request) er
 		return sftp.ErrSSHFxFailure
 	}
 
-	return c.RemoveFile(filePath, request.Filepath, fi)
+	return c.RemoveFile(filePath, virtualPath, fi)
 }
 
 func (c *Connection) handleSFTPUploadToNewFile(resolvedPath, filePath, requestPath string, errForRead error) (sftp.WriterAtReaderAt, error) {
@@ -427,4 +505,30 @@ func getOSOpenFlags(requestFlags sftp.FileOpenFlags) (flags int) {
 		osFlags |= os.O_EXCL
 	}
 	return osFlags
+}
+
+
+// SetFolderPrefix set the folder_prefix for this connection
+func (c *Connection) SetFolderPrefix(prefix string) {
+	c.folderPrefix = utils.CleanPath(prefix)
+}
+
+func (c *Connection) containsFolderPrefix(virtualPath string) bool {
+	if c.folderPrefix == `/` || c.folderPrefix == `` {
+		return true
+	}
+
+	return strings.HasPrefix(virtualPath, c.folderPrefix)
+}
+
+func (c *Connection) removeFolderPrefix(virtualPath string) string {
+	if c.folderPrefix == `/` || c.folderPrefix == `` {
+		return virtualPath
+	}
+
+	effectivePath := virtualPath[len(c.folderPrefix):]
+	if effectivePath == `` {
+		effectivePath = `/`
+	}
+	return effectivePath
 }

@@ -135,6 +135,8 @@ type Configuration struct {
 	ProxyProtocol int `json:"proxy_protocol" mapstructure:"proxy_protocol"`
 	// Deprecated: please use the same key in common configuration
 	ProxyAllowed     []string `json:"proxy_allowed" mapstructure:"proxy_allowed"`
+	// Virtual root folder prefix to include in all file operations (ex: /files)
+	FolderPrefix     string  `json:"folder_prefix" mapstructure:"folder_prefix"`
 	certChecker      *ssh.CertChecker
 	parsedUserCAKeys []ssh.PublicKey
 }
@@ -455,6 +457,7 @@ func (c *Configuration) AcceptInboundConnection(conn net.Conn, config *ssh.Serve
 								RemoteAddr:     conn.RemoteAddr(),
 								channel:        channel,
 							}
+							connection.SetFolderPrefix(c.FolderPrefix)
 							go c.handleSftpConnection(channel, &connection)
 						}
 					}
