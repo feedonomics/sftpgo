@@ -50,10 +50,10 @@ func (c *Connection) Fileread(request *sftp.Request) (io.ReaderAt, error) {
 	c.UpdateLastActivity()
 
 	if !c.containsFolderPrefix(request.Filepath) {
-		return nil, c.GetNotExistError()
+		return nil, sftp.ErrSSHFxPermissionDenied
 	}
 
-	virtualPath := c.removeFolderPrefix(request.Filepath)
+	virtualPath, _ := c.removeFolderPrefix(request.Filepath)
 	if !c.User.HasPerm(dataprovider.PermDownload, path.Dir(virtualPath)) {
 		return nil, sftp.ErrSSHFxPermissionDenied
 	}
@@ -95,9 +95,9 @@ func (c *Connection) handleFilewrite(request *sftp.Request) (sftp.WriterAtReader
 	c.UpdateLastActivity()
 
 	if !c.containsFolderPrefix(request.Filepath) {
-		return nil, c.GetNotExistError()
+		return nil, sftp.ErrSSHFxPermissionDenied
 	}
-	virtualPath := c.removeFolderPrefix(request.Filepath)
+	virtualPath, _ := c.removeFolderPrefix(request.Filepath)
 
 	if !c.User.IsFileAllowed(virtualPath) {
 		c.Log(logger.LevelWarn, "writing file %#v is not allowed", virtualPath)
@@ -157,18 +157,18 @@ func (c *Connection) handleFilewrite(request *sftp.Request) (sftp.WriterAtReader
 func (c *Connection) Filecmd(request *sftp.Request) error {
 	c.UpdateLastActivity()
 	if !c.containsFolderPrefix(request.Filepath) {
-		return c.GetNotExistError()
+		return sftp.ErrSSHFxPermissionDenied
 	}
 
 	// target of rename/symlink is not within prefix
 	var virtualTargetPath string
 	if request.Target != `` {
 		if !c.containsFolderPrefix(request.Target) {
-			return c.GetNotExistError()
+			return sftp.ErrSSHFxPermissionDenied
 		}
-		virtualTargetPath = c.removeFolderPrefix(request.Target)
+		virtualTargetPath, _ = c.removeFolderPrefix(request.Target)
 	}
-	virtualPath := c.removeFolderPrefix(request.Filepath)
+	virtualPath, _ := c.removeFolderPrefix(request.Filepath)
 
 	p, err := c.Fs.ResolvePath(virtualPath)
 	if err != nil {
@@ -215,7 +215,7 @@ func (c *Connection) Filelist(request *sftp.Request) (sftp.ListerAt, error) {
 
 	// inside of the folder prefix bounds
 	if c.containsFolderPrefix(request.Filepath) {
-		virtualPath := c.removeFolderPrefix(request.Filepath)
+		virtualPath, _ := c.removeFolderPrefix(request.Filepath)
 		p, err := c.Fs.ResolvePath(virtualPath)
 		if err != nil {
 			return nil, c.GetFsError(err)
@@ -289,6 +289,23 @@ func (c *Connection) Filelist(request *sftp.Request) (sftp.ListerAt, error) {
 		return listerAt([]os.FileInfo{
 			vfs.NewFileInfo(FileName, true, 0, s.ModTime(), true),
 		}), nil
+	case `Stat`:
+		if !c.User.HasPerm(dataprovider.PermListItems, path.Dir(`/`)) {
+			return nil, sftp.ErrSSHFxPermissionDenied
+		}
+
+		statPath, err := c.Fs.ResolvePath(`/`)
+		if err != nil {
+			return nil, c.GetFsError(err)
+		}
+
+		s, err := c.DoStat(statPath, 0)
+		if err != nil {
+			c.Log(logger.LevelDebug, "error running stat on path %#v: %+v", statPath, err)
+			return nil, c.GetFsError(err)
+		}
+
+		return listerAt([]os.FileInfo{s}), nil
 	}
 
 	return nil, sftp.ErrSSHFxOpUnsupported
@@ -299,10 +316,10 @@ func (c *Connection) Lstat(request *sftp.Request) (sftp.ListerAt, error) {
 	c.UpdateLastActivity()
 
 	if !c.containsFolderPrefix(request.Filepath) {
-		return nil, c.GetNotExistError()
+		return nil, sftp.ErrSSHFxPermissionDenied
 	}
 
-	virtualPath := c.removeFolderPrefix(request.Filepath)
+	virtualPath, _ := c.removeFolderPrefix(request.Filepath)
 	p, err := c.Fs.ResolvePath(virtualPath)
 	if err != nil {
 		return nil, c.GetFsError(err)
@@ -337,9 +354,9 @@ func (c *Connection) getSFTPCmdTargetPath(requestTarget string) (string, error) 
 
 func (c *Connection) handleSFTPSetstat(filePath string, request *sftp.Request) error {
 	if !c.containsFolderPrefix(request.Filepath) {
-		return c.GetNotExistError()
+		return sftp.ErrSSHFxPermissionDenied
 	}
-	virtualPath := c.removeFolderPrefix(request.Filepath)
+	virtualPath, _ := c.removeFolderPrefix(request.Filepath)
 
 	attrs := common.StatAttributes{
 		Flags: 0,
@@ -368,9 +385,9 @@ func (c *Connection) handleSFTPSetstat(filePath string, request *sftp.Request) e
 
 func (c *Connection) handleSFTPRemove(filePath string, request *sftp.Request) error {
 	if !c.containsFolderPrefix(request.Filepath) {
-		return c.GetNotExistError()
+		return sftp.ErrSSHFxPermissionDenied
 	}
-	virtualPath := c.removeFolderPrefix(request.Filepath)
+	virtualPath, _ := c.removeFolderPrefix(request.Filepath)
 
 	var fi os.FileInfo
 	var err error
@@ -507,28 +524,36 @@ func getOSOpenFlags(requestFlags sftp.FileOpenFlags) (flags int) {
 	return osFlags
 }
 
-
 // SetFolderPrefix set the folder_prefix for this connection
 func (c *Connection) SetFolderPrefix(prefix string) {
 	c.folderPrefix = utils.CleanPath(prefix)
 }
 
 func (c *Connection) containsFolderPrefix(virtualPath string) bool {
+	if !path.IsAbs(virtualPath) {
+		virtualPath = path.Clean(`/` + virtualPath)
+	}
+
 	if c.folderPrefix == `/` || c.folderPrefix == `` {
+		return true
+	} else if c.folderPrefix == virtualPath {
 		return true
 	}
 
-	return strings.HasPrefix(virtualPath, c.folderPrefix)
+	return strings.HasPrefix(virtualPath, c.folderPrefix+`/`)
 }
 
-func (c *Connection) removeFolderPrefix(virtualPath string) string {
+func (c *Connection) removeFolderPrefix(virtualPath string) (string, bool) {
 	if c.folderPrefix == `/` || c.folderPrefix == `` {
-		return virtualPath
+		return virtualPath, true
 	}
 
-	effectivePath := virtualPath[len(c.folderPrefix):]
-	if effectivePath == `` {
-		effectivePath = `/`
+	if c.containsFolderPrefix(virtualPath) {
+		effectivePath := virtualPath[len(c.folderPrefix):]
+		if effectivePath == `` {
+			effectivePath = `/`
+		}
+		return effectivePath, true
 	}
-	return effectivePath
+	return virtualPath, false
 }
