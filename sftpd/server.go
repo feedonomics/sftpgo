@@ -134,9 +134,9 @@ type Configuration struct {
 	// Deprecated: please use the same key in common configuration
 	ProxyProtocol int `json:"proxy_protocol" mapstructure:"proxy_protocol"`
 	// Deprecated: please use the same key in common configuration
-	ProxyAllowed     []string `json:"proxy_allowed" mapstructure:"proxy_allowed"`
+	ProxyAllowed []string `json:"proxy_allowed" mapstructure:"proxy_allowed"`
 	// Virtual root folder prefix to include in all file operations (ex: /files)
-	FolderPrefix     string  `json:"folder_prefix" mapstructure:"folder_prefix"`
+	FolderPrefix     string `json:"folder_prefix" mapstructure:"folder_prefix"`
 	certChecker      *ssh.CertChecker
 	parsedUserCAKeys []ssh.PublicKey
 }
