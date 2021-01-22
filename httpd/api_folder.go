@@ -1,6 +1,7 @@
 package httpd
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strconv"
@@ -44,8 +45,8 @@ func getFolders(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if _, ok := r.URL.Query()["folder_path"]; ok {
-		folderPath = r.URL.Query().Get("folder_path")
+	if _, ok := r.URL.Query()["folder-path"]; ok {
+		folderPath = r.URL.Query().Get("folder-path")
 	}
 	folders, err := dataprovider.GetFolders(limit, offset, order, folderPath)
 	if err == nil {
@@ -63,39 +64,39 @@ func addFolder(w http.ResponseWriter, r *http.Request) {
 		sendAPIResponse(w, r, err, "", http.StatusBadRequest)
 		return
 	}
-	err = dataprovider.AddFolder(folder)
-	if err == nil {
-		folder, err = dataprovider.GetFolderByPath(folder.MappedPath)
-		if err == nil {
-			render.JSON(w, r, folder)
-		} else {
-			sendAPIResponse(w, r, err, "", getRespStatus(err))
-		}
-	} else {
+	err = dataprovider.AddFolder(&folder)
+	if err != nil {
 		sendAPIResponse(w, r, err, "", getRespStatus(err))
+		return
 	}
+	renderFolder(w, r, folder.MappedPath)
+}
+
+func renderFolder(w http.ResponseWriter, r *http.Request, mappedPath string) {
+	folder, err := dataprovider.GetFolderByPath(mappedPath)
+	if err != nil {
+		sendAPIResponse(w, r, err, "", getRespStatus(err))
+		return
+	}
+	ctx := context.WithValue(r.Context(), render.StatusCtxKey, http.StatusCreated)
+	render.JSON(w, r.WithContext(ctx), folder)
 }
 
 func deleteFolderByPath(w http.ResponseWriter, r *http.Request) {
 	var folderPath string
-	if _, ok := r.URL.Query()["folder_path"]; ok {
-		folderPath = r.URL.Query().Get("folder_path")
+	if _, ok := r.URL.Query()["folder-path"]; ok {
+		folderPath = r.URL.Query().Get("folder-path")
 	}
-	if len(folderPath) == 0 {
+	if folderPath == "" {
 		err := errors.New("a non-empty folder path is required")
 		sendAPIResponse(w, r, err, "", http.StatusBadRequest)
 		return
 	}
 
-	folder, err := dataprovider.GetFolderByPath(folderPath)
+	err := dataprovider.DeleteFolder(folderPath)
 	if err != nil {
 		sendAPIResponse(w, r, err, "", getRespStatus(err))
 		return
 	}
-	err = dataprovider.DeleteFolder(folder)
-	if err != nil {
-		sendAPIResponse(w, r, err, "", http.StatusInternalServerError)
-	} else {
-		sendAPIResponse(w, r, err, "Folder deleted", http.StatusOK)
-	}
+	sendAPIResponse(w, r, err, "Folder deleted", http.StatusOK)
 }

@@ -97,7 +97,7 @@ func (s *Service) Start() error {
 
 	providerConf := config.GetProviderConf()
 
-	err = dataprovider.Initialize(providerConf, s.ConfigDir)
+	err = dataprovider.Initialize(providerConf, s.ConfigDir, s.PortableMode == 0)
 	if err != nil {
 		logger.Error(logSender, "", "error initializing data provider: %v", err)
 		logger.ErrorToConsole("error initializing data provider: %v", err)
@@ -106,7 +106,7 @@ func (s *Service) Start() error {
 
 	if s.PortableMode == 1 {
 		// create the user for portable mode
-		err = dataprovider.AddUser(s.PortableUser)
+		err = dataprovider.AddUser(&s.PortableUser)
 		if err != nil {
 			logger.ErrorToConsole("error adding portable user: %v", err)
 			return err

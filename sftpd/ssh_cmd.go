@@ -537,7 +537,7 @@ func (c *sshCommand) getCopyPaths() (string, string, error) {
 	if strings.HasSuffix(sshDestPath, "/") {
 		sshDestPath = path.Join(sshDestPath, path.Base(sshSourcePath))
 	}
-	if len(sshSourcePath) == 0 || len(sshDestPath) == 0 || len(c.args) != 2 {
+	if sshSourcePath == "" || sshDestPath == "" || len(c.args) != 2 {
 		err := errors.New("usage sftpgo-copy <source dir path> <destination dir path>")
 		return "", "", err
 	}
@@ -606,7 +606,7 @@ func (c *sshCommand) checkCopyPermissions(fsSourcePath, fsDestPath, sshSourcePat
 
 func (c *sshCommand) getRemovePath() (string, error) {
 	sshDestPath := c.getDestPath()
-	if len(sshDestPath) == 0 || len(c.args) != 1 {
+	if sshDestPath == "" || len(c.args) != 1 {
 		err := errors.New("usage sftpgo-remove <destination path>")
 		return "", err
 	}
@@ -712,7 +712,8 @@ func (c *sshCommand) sendExitStatus(err error) {
 	exitStatus := sshSubsystemExitStatus{
 		Status: status,
 	}
-	c.connection.channel.(ssh.Channel).SendRequest("exit-status", false, ssh.Marshal(&exitStatus)) //nolint:errcheck
+	_, err = c.connection.channel.(ssh.Channel).SendRequest("exit-status", false, ssh.Marshal(&exitStatus))
+	c.connection.Log(logger.LevelDebug, "exit status sent, error: %v", err)
 	c.connection.channel.Close()
 	// for scp we notify single uploads/downloads
 	if c.command != scpCmdName {

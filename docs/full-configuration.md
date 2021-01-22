@@ -104,9 +104,9 @@ The configuration file contains the following sections:
   - `proxy_allowed`, list of strings. Deprecated, please use the same key in `common` section.
 - **"ftpd"**, the configuration for the FTP server
   - `bindings`, list of structs. Each struct has the following fields:
-    - `port`, integer. The port used for serving FTP requests. 0 means disabled. Default: 0
-    - `address`, string. Leave blank to listen on all available network interfaces. Default: ""
-    - `apply_proxy_config`, boolean. If enabled the common proxy configuration, if any, will be applied. Default `true`
+    - `port`, integer. The port used for serving FTP requests. 0 means disabled. Default: 0.
+    - `address`, string. Leave blank to listen on all available network interfaces. Default: "".
+    - `apply_proxy_config`, boolean. If enabled the common proxy configuration, if any, will be applied. Default `true`.
     - `tls_mode`, integer. 0 means accept both cleartext and encrypted sessions. 1 means TLS is required for both control and data connection. 2 means implicit TLS. Do not enable this blindly, please check that a proper TLS config is in place if you set `tls_mode` is different from 0.
     - `force_passive_ip`, ip address. External IP address to expose for passive connections. Leavy empty to autodetect. Defaut: "".
     - `client_auth_type`, integer. Set to `1` to require client certificate authentication in addition to FTP authentication. You need to define at least a certificate authority for this to work. Default: 0.
@@ -126,14 +126,14 @@ The configuration file contains the following sections:
   - `ca_certificates`, list of strings. Set of root certificate authorities to be used to verify client certificates.
   - `ca_revocation_lists`, list of strings. Set a revocation lists, one for each root CA, to be used to check if a client certificate has been revoked. The revocation lists can be reloaded on demand sending a `SIGHUP` signal on Unix based systems and a `paramchange` request to the running service on Windows.
   - `tls_mode`, integer. Deprecated, please use `bindings`
-- **webdavd**, the configuration for the WebDAV server, more info [here](./webdav.md)
+- **"webdavd"**, the configuration for the WebDAV server, more info [here](./webdav.md)
   - `bindings`, list of structs. Each struct has the following fields:
     - `port`, integer. The port used for serving WebDAV requests. 0 means disabled. Default: 0.
     - `address`, string. Leave blank to listen on all available network interfaces. Default: "".
-    - `enable_https`, boolean. Set to `true` and provide both a certificate and a key file to enable HTTPS connection for this binding. Default `false`
+    - `enable_https`, boolean. Set to `true` and provide both a certificate and a key file to enable HTTPS connection for this binding. Default `false`.
     - `client_auth_type`, integer. Set to `1` to require client certificate authentication in addition to basic authentication. You need to define at least a certificate authority for this to work. Default: 0.
-  - `bind_port`, integer. Deprecated, please use `bindings`
-  - `bind_address`, string. Deprecated, please use `bindings`
+  - `bind_port`, integer. Deprecated, please use `bindings`.
+  - `bind_address`, string. Deprecated, please use `bindings`.
   - `certificate_file`, string. Certificate for WebDAV over HTTPS. This can be an absolute path or a path relative to the config dir.
   - `certificate_key_file`, string. Private key matching the above certificate. This can be an absolute path or a path relative to the config dir. A certificate and a private key are required to enable HTTPS connections. Certificate and key files can be reloaded on demand sending a `SIGHUP` signal on Unix based systems and a `paramchange` request to the running service on Windows.
   - `ca_certificates`, list of strings. Set of root certificate authorities to be used to verify client certificates.
@@ -160,7 +160,6 @@ The configuration file contains the following sections:
   - `sslmode`, integer. Used for drivers `mysql` and `postgresql`. 0 disable SSL/TLS connections, 1 require ssl, 2 set ssl mode to `verify-ca` for driver `postgresql` and `skip-verify` for driver `mysql`, 3 set ssl mode to `verify-full` for driver `postgresql` and `preferred` for driver `mysql`
   - `connectionstring`, string. Provide a custom database connection string. If not empty, this connection string will be used instead of building one using the previous parameters. Leave empty for drivers `bolt` and `memory`
   - `sql_tables_prefix`, string. Prefix for SQL tables
-  - `manage_users`, integer. Set to 0 to disable users management, 1 to enable
   - `track_quota`, integer. Set the preferred mode to track users quota between the following choices:
     - 0, disable quota tracking. REST API to scan users home directories/virtual folders and update quota will do nothing
     - 1, quota is updated each time a user uploads or deletes a file, even if the user has no quota restrictions
@@ -188,14 +187,21 @@ The configuration file contains the following sections:
       - `parallelism`. unsigned 8 bit integer. The number of threads (or lanes) used by the algorithm. Default: 2.
   - `update_mode`, integer. Defines how the database will be initialized/updated. 0 means automatically. 1 means manually using the initprovider sub-command.
 - **"httpd"**, the configuration for the HTTP server used to serve REST API and to expose the built-in web interface
-  - `bind_port`, integer. The port used for serving HTTP requests. Set to 0 to disable HTTP server. Default: 8080
-  - `bind_address`, string. Leave blank to listen on all available network interfaces. On \*NIX you can specify an absolute path to listen on a Unix-domain socket. Default: "127.0.0.1"
+  - `bindings`, list of structs. Each struct has the following fields:
+    - `port`, integer. The port used for serving HTTP requests. Default: 8080.
+    - `address`, string. Leave blank to listen on all available network interfaces. On *NIX you can specify an absolute path to listen on a Unix-domain socket Default: "127.0.0.1".
+    - `enable_web_admin`, boolean. Set to `false` to disable the built-in web admin for this binding. You also need to define `templates_path` and `static_files_path` to enable the built-in web admin interface. Default `true`.
+    - `enable_https`, boolean. Set to `true` and provide both a certificate and a key file to enable HTTPS connection for this binding. Default `false`.
+    - `client_auth_type`, integer. Set to `1` to require client certificate authentication in addition to JWT/Web authentication. You need to define at least a certificate authority for this to work. Default: 0.
+  - `bind_port`, integer. Deprecated, please use `bindings`.
+  - `bind_address`, string. Deprecated, please use `bindings`. Leave blank to listen on all available network interfaces. On \*NIX you can specify an absolute path to listen on a Unix-domain socket. Default: "127.0.0.1"
   - `templates_path`, string. Path to the HTML web templates. This can be an absolute path or a path relative to the config dir
   - `static_files_path`, string. Path to the static files for the web interface. This can be an absolute path or a path relative to the config dir. If both `templates_path` and `static_files_path` are empty the built-in web interface will be disabled
   - `backups_path`, string. Path to the backup directory. This can be an absolute path or a path relative to the config dir. We don't allow backups in arbitrary paths for security reasons
-  - `auth_user_file`, string. Path to a file used to store usernames and passwords for basic authentication. This can be an absolute path or a path relative to the config dir. We support HTTP basic authentication, and the file format must conform to the one generated using the Apache `htpasswd` tool. The supported password formats are bcrypt (`$2y$` prefix) and md5 crypt (`$apr1$` prefix). If empty, HTTP authentication is disabled.
   - `certificate_file`, string. Certificate for HTTPS. This can be an absolute path or a path relative to the config dir.
   - `certificate_key_file`, string. Private key matching the above certificate. This can be an absolute path or a path relative to the config dir. If both the certificate and the private key are provided, the server will expect HTTPS connections. Certificate and key files can be reloaded on demand sending a `SIGHUP` signal on Unix based systems and a `paramchange` request to the running service on Windows.
+  - `ca_certificates`, list of strings. Set of root certificate authorities to be used to verify client certificates.
+  - `ca_revocation_lists`, list of strings. Set a revocation lists, one for each root CA, to be used to check if a client certificate has been revoked. The revocation lists can be reloaded on demand sending a `SIGHUP` signal on Unix based systems and a `paramchange` request to the running service on Windows.
 - **"telemetry"**, the configuration for the telemetry server, more details [below](#telemetry-server)
   - `bind_port`, integer. The port used for serving HTTP requests. Set to 0 to disable HTTP server. Default: 10000
   - `bind_address`, string. Leave blank to listen on all available network interfaces. On \*NIX you can specify an absolute path to listen on a Unix-domain socket. Default: "127.0.0.1"
@@ -255,4 +261,4 @@ The telemetry server exposes the following endpoints:
 
 - `/healthz`, health information (for health checks)
 - `/metrics`, Prometheus metrics
-- `/debug/pprof`, for pprof, more details [here](./profiling.md)
+- `/debug/pprof`, if enabled via the `enable_profiler` configuration key, for profiling, more details [here](./profiling.md)

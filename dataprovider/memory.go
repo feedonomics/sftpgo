@@ -26,14 +26,16 @@ type memoryProviderHandle struct {
 	isClosed bool
 	// slice with ordered usernames
 	usernames []string
-	// mapping between ID and username
-	usersIdx map[int64]string
 	// map for users, username is the key
 	users map[string]User
 	// map for virtual folders, MappedPath is the key
 	vfolders map[string]vfs.BaseVirtualFolder
 	// slice with ordered folders mapped path
 	vfoldersPaths []string
+	// map for admins, username is the key
+	admins map[string]Admin
+	// slice with ordered admins
+	adminsUsernames []string
 }
 
 // MemoryProvider auth provider for a memory store
@@ -50,15 +52,16 @@ func initializeMemoryProvider(basePath string) {
 			configFile = filepath.Join(basePath, configFile)
 		}
 	}
-	provider = MemoryProvider{
+	provider = &MemoryProvider{
 		dbHandle: &memoryProviderHandle{
-			isClosed:      false,
-			usernames:     []string{},
-			usersIdx:      make(map[int64]string),
-			users:         make(map[string]User),
-			vfolders:      make(map[string]vfs.BaseVirtualFolder),
-			vfoldersPaths: []string{},
-			configFile:    configFile,
+			isClosed:        false,
+			usernames:       []string{},
+			users:           make(map[string]User),
+			vfolders:        make(map[string]vfs.BaseVirtualFolder),
+			vfoldersPaths:   []string{},
+			admins:          make(map[string]Admin),
+			adminsUsernames: []string{},
+			configFile:      configFile,
 		},
 	}
 	if err := provider.reloadConfig(); err != nil {
@@ -67,7 +70,7 @@ func initializeMemoryProvider(basePath string) {
 	}
 }
 
-func (p MemoryProvider) checkAvailability() error {
+func (p *MemoryProvider) checkAvailability() error {
 	p.dbHandle.Lock()
 	defer p.dbHandle.Unlock()
 	if p.dbHandle.isClosed {
@@ -76,7 +79,7 @@ func (p MemoryProvider) checkAvailability() error {
 	return nil
 }
 
-func (p MemoryProvider) close() error {
+func (p *MemoryProvider) close() error {
 	p.dbHandle.Lock()
 	defer p.dbHandle.Unlock()
 	if p.dbHandle.isClosed {
@@ -86,9 +89,9 @@ func (p MemoryProvider) close() error {
 	return nil
 }
 
-func (p MemoryProvider) validateUserAndPass(username, password, ip, protocol string) (User, error) {
+func (p *MemoryProvider) validateUserAndPass(username, password, ip, protocol string) (User, error) {
 	var user User
-	if len(password) == 0 {
+	if password == "" {
 		return user, errors.New("Credentials cannot be null or empty")
 	}
 	user, err := p.userExists(username)
@@ -99,7 +102,7 @@ func (p MemoryProvider) validateUserAndPass(username, password, ip, protocol str
 	return checkUserAndPass(user, password, ip, protocol)
 }
 
-func (p MemoryProvider) validateUserAndPubKey(username string, pubKey []byte) (User, string, error) {
+func (p *MemoryProvider) validateUserAndPubKey(username string, pubKey []byte) (User, string, error) {
 	var user User
 	if len(pubKey) == 0 {
 		return user, "", errors.New("Credentials cannot be null or empty")
@@ -112,19 +115,17 @@ func (p MemoryProvider) validateUserAndPubKey(username string, pubKey []byte) (U
 	return checkUserAndPubKey(user, pubKey)
 }
 
-func (p MemoryProvider) getUserByID(ID int64) (User, error) {
-	p.dbHandle.Lock()
-	defer p.dbHandle.Unlock()
-	if p.dbHandle.isClosed {
-		return User{}, errMemoryProviderClosed
+func (p *MemoryProvider) validateAdminAndPass(username, password, ip string) (Admin, error) {
+	admin, err := p.adminExists(username)
+	if err != nil {
+		providerLog(logger.LevelWarn, "error authenticating admin %#v: %v", username, err)
+		return admin, err
 	}
-	if val, ok := p.dbHandle.usersIdx[ID]; ok {
-		return p.userExistsInternal(val)
-	}
-	return User{}, &RecordNotFoundError{err: fmt.Sprintf("user with ID %v does not exist", ID)}
+	err = admin.checkUserAndPass(password, ip)
+	return admin, err
 }
 
-func (p MemoryProvider) updateLastLogin(username string) error {
+func (p *MemoryProvider) updateLastLogin(username string) error {
 	p.dbHandle.Lock()
 	defer p.dbHandle.Unlock()
 	if p.dbHandle.isClosed {
@@ -139,7 +140,7 @@ func (p MemoryProvider) updateLastLogin(username string) error {
 	return nil
 }
 
-func (p MemoryProvider) updateQuota(username string, filesAdd int, sizeAdd int64, reset bool) error {
+func (p *MemoryProvider) updateQuota(username string, filesAdd int, sizeAdd int64, reset bool) error {
 	p.dbHandle.Lock()
 	defer p.dbHandle.Unlock()
 	if p.dbHandle.isClosed {
@@ -164,7 +165,7 @@ func (p MemoryProvider) updateQuota(username string, filesAdd int, sizeAdd int64
 	return nil
 }
 
-func (p MemoryProvider) getUsedQuota(username string) (int, int64, error) {
+func (p *MemoryProvider) getUsedQuota(username string) (int, int64, error) {
 	p.dbHandle.Lock()
 	defer p.dbHandle.Unlock()
 	if p.dbHandle.isClosed {
@@ -178,13 +179,13 @@ func (p MemoryProvider) getUsedQuota(username string) (int, int64, error) {
 	return user.UsedQuotaFiles, user.UsedQuotaSize, err
 }
 
-func (p MemoryProvider) addUser(user User) error {
+func (p *MemoryProvider) addUser(user *User) error {
 	p.dbHandle.Lock()
 	defer p.dbHandle.Unlock()
 	if p.dbHandle.isClosed {
 		return errMemoryProviderClosed
 	}
-	err := validateUser(&user)
+	err := validateUser(user)
 	if err != nil {
 		return err
 	}
@@ -198,20 +199,19 @@ func (p MemoryProvider) addUser(user User) error {
 	user.UsedQuotaFiles = 0
 	user.LastLogin = 0
 	user.VirtualFolders = p.joinVirtualFoldersFields(user)
-	p.dbHandle.users[user.Username] = user
-	p.dbHandle.usersIdx[user.ID] = user.Username
+	p.dbHandle.users[user.Username] = user.getACopy()
 	p.dbHandle.usernames = append(p.dbHandle.usernames, user.Username)
 	sort.Strings(p.dbHandle.usernames)
 	return nil
 }
 
-func (p MemoryProvider) updateUser(user User) error {
+func (p *MemoryProvider) updateUser(user *User) error {
 	p.dbHandle.Lock()
 	defer p.dbHandle.Unlock()
 	if p.dbHandle.isClosed {
 		return errMemoryProviderClosed
 	}
-	err := validateUser(&user)
+	err := validateUser(user)
 	if err != nil {
 		return err
 	}
@@ -227,11 +227,13 @@ func (p MemoryProvider) updateUser(user User) error {
 	user.UsedQuotaSize = u.UsedQuotaSize
 	user.UsedQuotaFiles = u.UsedQuotaFiles
 	user.LastLogin = u.LastLogin
-	p.dbHandle.users[user.Username] = user
+	user.ID = u.ID
+	// pre-login and external auth hook will use the passed *user so save a copy
+	p.dbHandle.users[user.Username] = user.getACopy()
 	return nil
 }
 
-func (p MemoryProvider) deleteUser(user User) error {
+func (p *MemoryProvider) deleteUser(user *User) error {
 	p.dbHandle.Lock()
 	defer p.dbHandle.Unlock()
 	if p.dbHandle.isClosed {
@@ -245,9 +247,8 @@ func (p MemoryProvider) deleteUser(user User) error {
 		p.removeUserFromFolderMapping(oldFolder.MappedPath, u.Username)
 	}
 	delete(p.dbHandle.users, user.Username)
-	delete(p.dbHandle.usersIdx, user.ID)
 	// this could be more efficient
-	p.dbHandle.usernames = []string{}
+	p.dbHandle.usernames = make([]string, 0, len(p.dbHandle.users))
 	for username := range p.dbHandle.users {
 		p.dbHandle.usernames = append(p.dbHandle.usernames, username)
 	}
@@ -255,7 +256,7 @@ func (p MemoryProvider) deleteUser(user User) error {
 	return nil
 }
 
-func (p MemoryProvider) dumpUsers() ([]User, error) {
+func (p *MemoryProvider) dumpUsers() ([]User, error) {
 	p.dbHandle.Lock()
 	defer p.dbHandle.Unlock()
 	users := make([]User, 0, len(p.dbHandle.usernames))
@@ -275,7 +276,7 @@ func (p MemoryProvider) dumpUsers() ([]User, error) {
 	return users, err
 }
 
-func (p MemoryProvider) dumpFolders() ([]vfs.BaseVirtualFolder, error) {
+func (p *MemoryProvider) dumpFolders() ([]vfs.BaseVirtualFolder, error) {
 	p.dbHandle.Lock()
 	defer p.dbHandle.Unlock()
 	folders := make([]vfs.BaseVirtualFolder, 0, len(p.dbHandle.vfoldersPaths))
@@ -288,7 +289,7 @@ func (p MemoryProvider) dumpFolders() ([]vfs.BaseVirtualFolder, error) {
 	return folders, nil
 }
 
-func (p MemoryProvider) getUsers(limit int, offset int, order string, username string) ([]User, error) {
+func (p *MemoryProvider) getUsers(limit int, offset int, order string) ([]User, error) {
 	users := make([]User, 0, limit)
 	var err error
 	p.dbHandle.Lock()
@@ -297,16 +298,6 @@ func (p MemoryProvider) getUsers(limit int, offset int, order string, username s
 		return users, errMemoryProviderClosed
 	}
 	if limit <= 0 {
-		return users, err
-	}
-	if len(username) > 0 {
-		if offset == 0 {
-			user, err := p.userExistsInternal(username)
-			if err == nil {
-				user.HideConfidentialData()
-				users = append(users, user)
-			}
-		}
 		return users, err
 	}
 	itNum := 0
@@ -343,7 +334,7 @@ func (p MemoryProvider) getUsers(limit int, offset int, order string, username s
 	return users, err
 }
 
-func (p MemoryProvider) userExists(username string) (User, error) {
+func (p *MemoryProvider) userExists(username string) (User, error) {
 	p.dbHandle.Lock()
 	defer p.dbHandle.Unlock()
 	if p.dbHandle.isClosed {
@@ -352,14 +343,152 @@ func (p MemoryProvider) userExists(username string) (User, error) {
 	return p.userExistsInternal(username)
 }
 
-func (p MemoryProvider) userExistsInternal(username string) (User, error) {
+func (p *MemoryProvider) userExistsInternal(username string) (User, error) {
 	if val, ok := p.dbHandle.users[username]; ok {
 		return val.getACopy(), nil
 	}
 	return User{}, &RecordNotFoundError{err: fmt.Sprintf("username %#v does not exist", username)}
 }
 
-func (p MemoryProvider) updateFolderQuota(mappedPath string, filesAdd int, sizeAdd int64, reset bool) error {
+func (p *MemoryProvider) addAdmin(admin *Admin) error {
+	p.dbHandle.Lock()
+	defer p.dbHandle.Unlock()
+	if p.dbHandle.isClosed {
+		return errMemoryProviderClosed
+	}
+	err := admin.validate()
+	if err != nil {
+		return err
+	}
+	_, err = p.adminExistsInternal(admin.Username)
+	if err == nil {
+		return fmt.Errorf("admin %#v already exists", admin.Username)
+	}
+	admin.ID = p.getNextAdminID()
+	p.dbHandle.admins[admin.Username] = admin.getACopy()
+	p.dbHandle.adminsUsernames = append(p.dbHandle.adminsUsernames, admin.Username)
+	sort.Strings(p.dbHandle.adminsUsernames)
+	return nil
+}
+
+func (p *MemoryProvider) updateAdmin(admin *Admin) error {
+	p.dbHandle.Lock()
+	defer p.dbHandle.Unlock()
+	if p.dbHandle.isClosed {
+		return errMemoryProviderClosed
+	}
+	err := admin.validate()
+	if err != nil {
+		return err
+	}
+	a, err := p.adminExistsInternal(admin.Username)
+	if err != nil {
+		return err
+	}
+	admin.ID = a.ID
+	p.dbHandle.admins[admin.Username] = admin.getACopy()
+	return nil
+}
+
+func (p *MemoryProvider) deleteAdmin(admin *Admin) error {
+	p.dbHandle.Lock()
+	defer p.dbHandle.Unlock()
+	if p.dbHandle.isClosed {
+		return errMemoryProviderClosed
+	}
+	_, err := p.adminExistsInternal(admin.Username)
+	if err != nil {
+		return err
+	}
+
+	delete(p.dbHandle.admins, admin.Username)
+	// this could be more efficient
+	p.dbHandle.adminsUsernames = make([]string, 0, len(p.dbHandle.admins))
+	for username := range p.dbHandle.admins {
+		p.dbHandle.adminsUsernames = append(p.dbHandle.adminsUsernames, username)
+	}
+	sort.Strings(p.dbHandle.adminsUsernames)
+	return nil
+}
+
+func (p *MemoryProvider) adminExists(username string) (Admin, error) {
+	p.dbHandle.Lock()
+	defer p.dbHandle.Unlock()
+	if p.dbHandle.isClosed {
+		return Admin{}, errMemoryProviderClosed
+	}
+	return p.adminExistsInternal(username)
+}
+
+func (p *MemoryProvider) adminExistsInternal(username string) (Admin, error) {
+	if val, ok := p.dbHandle.admins[username]; ok {
+		return val.getACopy(), nil
+	}
+	return Admin{}, &RecordNotFoundError{err: fmt.Sprintf("admin %#v does not exist", username)}
+}
+
+func (p *MemoryProvider) dumpAdmins() ([]Admin, error) {
+	p.dbHandle.Lock()
+	defer p.dbHandle.Unlock()
+
+	admins := make([]Admin, 0, len(p.dbHandle.admins))
+	if p.dbHandle.isClosed {
+		return admins, errMemoryProviderClosed
+	}
+	for _, admin := range p.dbHandle.admins {
+		admins = append(admins, admin)
+	}
+	return admins, nil
+}
+
+func (p *MemoryProvider) getAdmins(limit int, offset int, order string) ([]Admin, error) {
+	admins := make([]Admin, 0, limit)
+
+	p.dbHandle.Lock()
+	defer p.dbHandle.Unlock()
+
+	if p.dbHandle.isClosed {
+		return admins, errMemoryProviderClosed
+	}
+	if limit <= 0 {
+		return admins, nil
+	}
+	itNum := 0
+	if order == OrderASC {
+		for _, username := range p.dbHandle.adminsUsernames {
+			itNum++
+			if itNum <= offset {
+				continue
+			}
+			a := p.dbHandle.admins[username]
+			admin := a.getACopy()
+			admin.HideConfidentialData()
+			admins = append(admins, admin)
+			if len(admins) >= limit {
+				break
+			}
+		}
+	} else {
+		for i := len(p.dbHandle.adminsUsernames) - 1; i >= 0; i-- {
+			itNum++
+			if itNum <= offset {
+				continue
+			}
+			username := p.dbHandle.adminsUsernames[i]
+			a := p.dbHandle.admins[username]
+			admin := a.getACopy()
+			admin.HideConfidentialData()
+			admins = append(admins, admin)
+			if len(admins) >= limit {
+				break
+			}
+		}
+	}
+
+	return admins, nil
+}
+
+func (p *MemoryProvider) updateFolderQuota(mappedPath string, filesAdd int, sizeAdd int64, reset bool) error {
 	p.dbHandle.Lock()
 	defer p.dbHandle.Unlock()
 	if p.dbHandle.isClosed {
@@ -382,7 +511,7 @@ func (p MemoryProvider) updateFolderQuota(mappedPath string, filesAdd int, sizeA
 	return nil
 }
 
-func (p MemoryProvider) getUsedFolderQuota(mappedPath string) (int, int64, error) {
+func (p *MemoryProvider) getUsedFolderQuota(mappedPath string) (int, int64, error) {
 	p.dbHandle.Lock()
 	defer p.dbHandle.Unlock()
 	if p.dbHandle.isClosed {
@@ -396,7 +525,7 @@ func (p MemoryProvider) getUsedFolderQuota(mappedPath string) (int, int64, error
 	return folder.UsedQuotaFiles, folder.UsedQuotaSize, err
 }
 
-func (p MemoryProvider) joinVirtualFoldersFields(user User) []vfs.VirtualFolder {
+func (p *MemoryProvider) joinVirtualFoldersFields(user *User) []vfs.VirtualFolder {
 	var folders []vfs.VirtualFolder
 	for _, folder := range user.VirtualFolders {
 		f, err := p.addOrGetFolderInternal(folder.MappedPath, user.Username, folder.UsedQuotaSize, folder.UsedQuotaFiles,
@@ -412,7 +541,7 @@ func (p MemoryProvider) joinVirtualFoldersFields(user User) []vfs.VirtualFolder 
 	return folders
 }
 
-func (p MemoryProvider) removeUserFromFolderMapping(mappedPath, username string) {
+func (p *MemoryProvider) removeUserFromFolderMapping(mappedPath, username string) {
 	folder, err := p.folderExistsInternal(mappedPath)
 	if err == nil {
 		var usernames []string
@@ -426,7 +555,7 @@ func (p MemoryProvider) removeUserFromFolderMapping(mappedPath, username string)
 	}
 }
 
-func (p MemoryProvider) updateFoldersMappingInternal(folder vfs.BaseVirtualFolder) {
+func (p *MemoryProvider) updateFoldersMappingInternal(folder vfs.BaseVirtualFolder) {
 	p.dbHandle.vfolders[folder.MappedPath] = folder
 	if !utils.IsStringInSlice(folder.MappedPath, p.dbHandle.vfoldersPaths) {
 		p.dbHandle.vfoldersPaths = append(p.dbHandle.vfoldersPaths, folder.MappedPath)
@@ -434,7 +563,7 @@ func (p MemoryProvider) updateFoldersMappingInternal(folder vfs.BaseVirtualFolde
 	}
 }
 
-func (p MemoryProvider) addOrGetFolderInternal(mappedPath, username string, usedQuotaSize int64, usedQuotaFiles int, lastQuotaUpdate int64) (vfs.BaseVirtualFolder, error) {
+func (p *MemoryProvider) addOrGetFolderInternal(mappedPath, username string, usedQuotaSize int64, usedQuotaFiles int, lastQuotaUpdate int64) (vfs.BaseVirtualFolder, error) {
 	folder, err := p.folderExistsInternal(mappedPath)
 	if _, ok := err.(*RecordNotFoundError); ok {
 		folder := vfs.BaseVirtualFolder{
@@ -455,14 +584,14 @@ func (p MemoryProvider) addOrGetFolderInternal(mappedPath, username string, used
 	return folder, err
 }
 
-func (p MemoryProvider) folderExistsInternal(mappedPath string) (vfs.BaseVirtualFolder, error) {
+func (p *MemoryProvider) folderExistsInternal(mappedPath string) (vfs.BaseVirtualFolder, error) {
 	if val, ok := p.dbHandle.vfolders[mappedPath]; ok {
 		return val, nil
 	}
 	return vfs.BaseVirtualFolder{}, &RecordNotFoundError{err: fmt.Sprintf("folder %#v does not exist", mappedPath)}
 }
 
-func (p MemoryProvider) getFolders(limit, offset int, order, folderPath string) ([]vfs.BaseVirtualFolder, error) {
+func (p *MemoryProvider) getFolders(limit, offset int, order, folderPath string) ([]vfs.BaseVirtualFolder, error) {
 	folders := make([]vfs.BaseVirtualFolder, 0, limit)
 	var err error
 	p.dbHandle.Lock()
@@ -513,7 +642,7 @@ func (p MemoryProvider) getFolders(limit, offset int, order, folderPath string) 
 	return folders, err
 }
 
-func (p MemoryProvider) getFolderByPath(mappedPath string) (vfs.BaseVirtualFolder, error) {
+func (p *MemoryProvider) getFolderByPath(mappedPath string) (vfs.BaseVirtualFolder, error) {
 	p.dbHandle.Lock()
 	defer p.dbHandle.Unlock()
 	if p.dbHandle.isClosed {
@@ -522,13 +651,13 @@ func (p MemoryProvider) getFolderByPath(mappedPath string) (vfs.BaseVirtualFolde
 	return p.folderExistsInternal(mappedPath)
 }
 
-func (p MemoryProvider) addFolder(folder vfs.BaseVirtualFolder) error {
+func (p *MemoryProvider) addFolder(folder *vfs.BaseVirtualFolder) error {
 	p.dbHandle.Lock()
 	defer p.dbHandle.Unlock()
 	if p.dbHandle.isClosed {
 		return errMemoryProviderClosed
 	}
-	err := validateFolder(&folder)
+	err := validateFolder(folder)
 	if err != nil {
 		return err
 	}
@@ -537,13 +666,13 @@ func (p MemoryProvider) addFolder(folder vfs.BaseVirtualFolder) error {
 		return fmt.Errorf("folder %#v already exists", folder.MappedPath)
 	}
 	folder.ID = p.getNextFolderID()
-	p.dbHandle.vfolders[folder.MappedPath] = folder
+	p.dbHandle.vfolders[folder.MappedPath] = *folder
 	p.dbHandle.vfoldersPaths = append(p.dbHandle.vfoldersPaths, folder.MappedPath)
 	sort.Strings(p.dbHandle.vfoldersPaths)
 	return nil
 }
 
-func (p MemoryProvider) deleteFolder(folder vfs.BaseVirtualFolder) error {
+func (p *MemoryProvider) deleteFolder(folder *vfs.BaseVirtualFolder) error {
 	p.dbHandle.Lock()
 	defer p.dbHandle.Unlock()
 	if p.dbHandle.isClosed {
@@ -576,17 +705,17 @@ func (p MemoryProvider) deleteFolder(folder vfs.BaseVirtualFolder) error {
 	return nil
 }
 
-func (p MemoryProvider) getNextID() int64 {
+func (p *MemoryProvider) getNextID() int64 {
 	nextID := int64(1)
-	for id := range p.dbHandle.usersIdx {
-		if id >= nextID {
-			nextID = id + 1
+	for _, v := range p.dbHandle.users {
+		if v.ID >= nextID {
+			nextID = v.ID + 1
 		}
 	}
 	return nextID
 }
 
-func (p MemoryProvider) getNextFolderID() int64 {
+func (p *MemoryProvider) getNextFolderID() int64 {
 	nextID := int64(1)
 	for _, v := range p.dbHandle.vfolders {
 		if v.ID >= nextID {
@@ -596,17 +725,28 @@ func (p MemoryProvider) getNextFolderID() int64 {
 	return nextID
 }
 
-func (p MemoryProvider) clear() {
+func (p *MemoryProvider) getNextAdminID() int64 {
+	nextID := int64(1)
+	for _, a := range p.dbHandle.admins {
+		if a.ID >= nextID {
+			nextID = a.ID + 1
+		}
+	}
+	return nextID
+}
+
+func (p *MemoryProvider) clear() {
 	p.dbHandle.Lock()
 	defer p.dbHandle.Unlock()
 	p.dbHandle.usernames = []string{}
-	p.dbHandle.usersIdx = make(map[int64]string)
 	p.dbHandle.users = make(map[string]User)
 	p.dbHandle.vfoldersPaths = []string{}
 	p.dbHandle.vfolders = make(map[string]vfs.BaseVirtualFolder)
+	p.dbHandle.admins = make(map[string]Admin)
+	p.dbHandle.adminsUsernames = []string{}
 }
 
-func (p MemoryProvider) reloadConfig() error {
+func (p *MemoryProvider) reloadConfig() error {
 	if p.dbHandle.configFile == "" {
 		providerLog(logger.LevelDebug, "no users configuration file defined")
 		return nil
@@ -644,8 +784,9 @@ func (p MemoryProvider) reloadConfig() error {
 			logger.Debug(logSender, "", "folder %#v already exists, restore not needed", folder.MappedPath)
 			continue
 		}
+		folder := folder // pin
 		folder.Users = nil
-		err = p.addFolder(folder)
+		err = p.addFolder(&folder)
 		if err != nil {
 			providerLog(logger.LevelWarn, "error adding folder %#v: %v", folder.MappedPath, err)
 			return err
@@ -653,15 +794,16 @@ func (p MemoryProvider) reloadConfig() error {
 	}
 	for _, user := range dump.Users {
 		u, err := p.userExists(user.Username)
+		user := user // pin
 		if err == nil {
 			user.ID = u.ID
-			err = p.updateUser(user)
+			err = p.updateUser(&user)
 			if err != nil {
 				providerLog(logger.LevelWarn, "error updating user %#v: %v", user.Username, err)
 				return err
 			}
 		} else {
-			err = p.addUser(user)
+			err = p.addUser(&user)
 			if err != nil {
 				providerLog(logger.LevelWarn, "error adding user %#v: %v", user.Username, err)
 				return err
@@ -673,14 +815,14 @@ func (p MemoryProvider) reloadConfig() error {
 }
 
 // initializeDatabase does nothing, no initilization is needed for memory provider
-func (p MemoryProvider) initializeDatabase() error {
+func (p *MemoryProvider) initializeDatabase() error {
 	return ErrNoInitRequired
 }
 
-func (p MemoryProvider) migrateDatabase() error {
+func (p *MemoryProvider) migrateDatabase() error {
 	return ErrNoInitRequired
 }
 
-func (p MemoryProvider) revertDatabase(targetVersion int) error {
+func (p *MemoryProvider) revertDatabase(targetVersion int) error {
 	return errors.New("memory provider does not store data, revert not possible")
 }

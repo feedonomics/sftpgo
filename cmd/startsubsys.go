@@ -84,7 +84,7 @@ Command-line flags should be specified in the Subsystem declaration.
 				dataProviderConf.PreferDatabaseCredentials = true
 			}
 			config.SetProviderConf(dataProviderConf)
-			err = dataprovider.Initialize(dataProviderConf, configDir)
+			err = dataprovider.Initialize(dataProviderConf, configDir, false)
 			if err != nil {
 				logger.Error(logSender, connectionID, "unable to initialize the data provider: %v", err)
 				os.Exit(1)
@@ -96,7 +96,7 @@ Command-line flags should be specified in the Subsystem declaration.
 				if user.HomeDir != filepath.Clean(homedir) && !preserveHomeDir {
 					// update the user
 					user.HomeDir = filepath.Clean(homedir)
-					err = dataprovider.UpdateUser(user)
+					err = dataprovider.UpdateUser(&user)
 					if err != nil {
 						logger.Error(logSender, connectionID, "unable to update user %#v: %v", username, err)
 						os.Exit(1)
@@ -113,7 +113,7 @@ Command-line flags should be specified in the Subsystem declaration.
 				user.Password = connectionID
 				user.Permissions = make(map[string][]string)
 				user.Permissions["/"] = []string{dataprovider.PermAny}
-				err = dataprovider.AddUser(user)
+				err = dataprovider.AddUser(&user)
 				if err != nil {
 					logger.Error(logSender, connectionID, "unable to add user %#v: %v", username, err)
 					os.Exit(1)

@@ -1,6 +1,7 @@
 package sftpd
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -45,6 +46,10 @@ func (c *scpCommand) handle() (err error) {
 		c.args, c.connection.User.Username, commandType, destPath)
 	if commandType == "-t" {
 		// -t means "to", so upload
+		err = c.sendConfirmationMessage()
+		if err != nil {
+			return err
+		}
 		err = c.handleRecursiveUpload()
 		if err != nil {
 			return err
@@ -68,31 +73,24 @@ func (c *scpCommand) handle() (err error) {
 }
 
 func (c *scpCommand) handleRecursiveUpload() error {
-	var err error
 	numDirs := 0
 	destPath := c.getDestPath()
 	for {
-		err = c.sendConfirmationMessage()
-		if err != nil {
-			return err
-		}
 		command, err := c.getNextUploadProtocolMessage()
 		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return nil
+			}
 			return err
 		}
 		if strings.HasPrefix(command, "E") {
 			numDirs--
 			c.connection.Log(logger.LevelDebug, "received end dir command, num dirs: %v", numDirs)
-			if numDirs == 0 {
-				// upload is now complete send confirmation message
-				err = c.sendConfirmationMessage()
-				if err != nil {
-					return err
-				}
-			} else {
-				// the destination dir is now the parent directory
-				destPath = path.Join(destPath, "..")
+			if numDirs < 0 {
+				return errors.New("unacceptable end dir command")
 			}
+			// the destination dir is now the parent directory
+			destPath = path.Join(destPath, "..")
 		} else {
 			sizeToRead, name, err := c.parseUploadMessage(command)
 			if err != nil {
@@ -113,11 +111,11 @@ func (c *scpCommand) handleRecursiveUpload() error {
 				}
 			}
 		}
-		if err != nil || numDirs == 0 {
-			break
+		err = c.sendConfirmationMessage()
+		if err != nil {
+			return err
 		}
 	}
-	return err
 }
 
 func (c *scpCommand) handleCreateDir(dirPath string) error {
@@ -152,6 +150,7 @@ func (c *scpCommand) getUploadFileData(sizeToRead int64, transfer *transfer) err
 	}
 
 	if sizeToRead > 0 {
+		// we could replace this method with io.CopyN implementing "Write" method in transfer struct
 		remaining := sizeToRead
 		buf := make([]byte, int64(math.Min(32768, float64(sizeToRead))))
 		for {
@@ -188,7 +187,7 @@ func (c *scpCommand) getUploadFileData(sizeToRead int64, transfer *transfer) err
 		c.sendErrorMessage(err)
 		return err
 	}
-	return c.sendConfirmationMessage()
+	return nil
 }
 
 func (c *scpCommand) handleUploadFile(resolvedPath, filePath string, sizeToRead int64, isNewFile bool, fileSize int64, requestPath string) error {
@@ -420,6 +419,7 @@ func (c *scpCommand) sendDownloadFileData(filePath string, stat os.FileInfo, tra
 		return err
 	}
 
+	// we could replace this method with io.CopyN implementing "Read" method in transfer struct
 	buf := make([]byte, 32768)
 	var n int
 	for {
@@ -541,7 +541,7 @@ func (c *scpCommand) readConfirmationMessage() error {
 				break
 			}
 			if n > 0 {
-				msg.WriteString(string(readed))
+				msg.Write(readed)
 			}
 		}
 		c.connection.Log(logger.LevelInfo, "scp error message received: %v is error: %v", msg.String(), isError)
@@ -567,10 +567,10 @@ func (c *scpCommand) readProtocolMessage() (string, error) {
 			if n == 1 && readed[0] == newLine[0] {
 				break
 			}
-			command.WriteString(string(readed))
+			command.Write(readed)
 		}
 	}
-	if err != nil {
+	if err != nil && !errors.Is(err, io.EOF) {
 		c.connection.channel.Close()
 	}
 	return command.String(), err
@@ -605,7 +605,6 @@ func (c *scpCommand) sendProtocolMessage(message string) error {
 }
 
 // get the next upload protocol message ignoring T command if any
-// we use our own user setting for permissions
 func (c *scpCommand) getNextUploadProtocolMessage() (string, error) {
 	var command string
 	var err error
@@ -631,6 +630,8 @@ func (c *scpCommand) createDir(dirPath string) error {
 	var isDir bool
 	isDir, err = vfs.IsDirectory(c.connection.Fs, dirPath)
 	if err == nil && isDir {
+		// if this is a virtual dir the resolved path will exist, we don't need a specific check
+		// TODO: remember to check if it's okay when we'll add virtual folders support to cloud backends
 		c.connection.Log(logger.LevelDebug, "directory %#v already exists", dirPath)
 		return nil
 	}
@@ -668,14 +669,14 @@ func (c *scpCommand) parseUploadMessage(command string) (int64, string, error) {
 			return size, name, err
 		}
 		name = parts[2]
-		if len(name) == 0 {
+		if name == "" {
 			err = fmt.Errorf("error getting name from upload message, cannot be empty")
 			c.connection.Log(logger.LevelWarn, "error: %v", err)
 			c.sendErrorMessage(err)
 			return size, name, err
 		}
 	} else {
-		err = fmt.Errorf("Error splitting upload message: %#v", command)
+		err = fmt.Errorf("unable to split upload message: %#v", command)
 		c.connection.Log(logger.LevelWarn, "error: %v", err)
 		c.sendErrorMessage(err)
 		return size, name, err

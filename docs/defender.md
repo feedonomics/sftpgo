@@ -1,6 +1,6 @@
 # Defender
 
-The experimental built-in `defender` allows you to configure an auto-blocking policy for SFTPGo and thus helps to prevent DoS (Denial of Service) and brute force password guessing.
+The built-in `defender` allows you to configure an auto-blocking policy for SFTPGo and thus helps to prevent DoS (Denial of Service) and brute force password guessing.
 
 If enabled it will protect SFTP, FTP and WebDAV services and it will automatically block hosts (IP addresses) that continually fail to log in or attempt to connect.
 
@@ -38,7 +38,7 @@ The `defender` can also load a permanent block list and/or a safe list of ip add
 - `safelist_file`, defines the path to a file containing a list of ip addresses and/or networks to never ban.
 - `blocklist_file`, defines the path to a file containing a list of ip addresses and/or networks to always ban.
 
-These list must be stored as JSON with the following schema:
+These list must be stored as JSON conforming to the following schema:
 
 - `addresses`, list of strings. Each string must be a valid IPv4/IPv6 address.
 - `networks`, list of strings. Each string must be a valid IPv4/IPv6 CIDR address.

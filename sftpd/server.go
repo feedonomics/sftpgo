@@ -260,7 +260,7 @@ func (c *Configuration) Initialize(configDir string) error {
 	}
 
 	serviceStatus.IsActive = true
-	serviceStatus.SSHCommands = strings.Join(c.EnabledSSHCommands, ", ")
+	serviceStatus.SSHCommands = c.EnabledSSHCommands
 
 	return <-exitChannel
 }
@@ -325,7 +325,7 @@ func (c *Configuration) configureLoginBanner(serverConfig *ssh.ServerConfig, con
 }
 
 func (c *Configuration) configureKeyboardInteractiveAuth(serverConfig *ssh.ServerConfig) {
-	if len(c.KeyboardInteractiveHook) == 0 {
+	if c.KeyboardInteractiveHook == "" {
 		return
 	}
 	if !strings.HasPrefix(c.KeyboardInteractiveHook, "http") {
@@ -362,6 +362,9 @@ func canAcceptConnection(ip string) bool {
 		logger.Log(logger.LevelDebug, common.ProtocolSSH, "", "connection refused, configured limit reached")
 		return false
 	}
+	if err := common.Config.ExecutePostConnectHook(ip, common.ProtocolSSH); err != nil {
+		return false
+	}
 	return true
 }
 
@@ -380,10 +383,7 @@ func (c *Configuration) AcceptInboundConnection(conn net.Conn, config *ssh.Serve
 	// Before beginning a handshake must be performed on the incoming net.Conn
 	// we'll set a Deadline for handshake to complete, the default is 2 minutes as OpenSSH
 	conn.SetDeadline(time.Now().Add(handshakeTimeout)) //nolint:errcheck
-	if err := common.Config.ExecutePostConnectHook(ipAddr, common.ProtocolSSH); err != nil {
-		conn.Close()
-		return
-	}
+
 	sconn, chans, reqs, err := ssh.NewServerConn(conn, config)
 	if err != nil {
 		logger.Debug(logSender, "", "failed to accept an incoming connection: %v", err)
@@ -474,7 +474,9 @@ func (c *Configuration) AcceptInboundConnection(conn net.Conn, config *ssh.Serve
 						ok = processSSHCommand(req.Payload, &connection, c.EnabledSSHCommands)
 					}
 				}
-				req.Reply(ok, nil) //nolint:errcheck
+				if req.WantReply {
+					req.Reply(ok, nil) //nolint:errcheck
+				}
 			}
 		}(requests, channelCounter)
 	}

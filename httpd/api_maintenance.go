@@ -11,40 +11,56 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/go-chi/render"
+
 	"github.com/drakkan/sftpgo/common"
 	"github.com/drakkan/sftpgo/dataprovider"
 	"github.com/drakkan/sftpgo/logger"
 	"github.com/drakkan/sftpgo/vfs"
 )
 
+func validateBackupFile(outputFile string) (string, error) {
+	if outputFile == "" {
+		return "", errors.New("Invalid or missing output-file")
+	}
+	if filepath.IsAbs(outputFile) {
+		return "", fmt.Errorf("Invalid output-file %#v: it must be a relative path", outputFile)
+	}
+	if strings.Contains(outputFile, "..") {
+		return "", fmt.Errorf("Invalid output-file %#v", outputFile)
+	}
+	outputFile = filepath.Join(backupsPath, outputFile)
+	return outputFile, nil
+}
+
 func dumpData(w http.ResponseWriter, r *http.Request) {
-	var outputFile, indent string
-	if _, ok := r.URL.Query()["output_file"]; ok {
-		outputFile = strings.TrimSpace(r.URL.Query().Get("output_file"))
+	var outputFile, outputData, indent string
+	if _, ok := r.URL.Query()["output-file"]; ok {
+		outputFile = strings.TrimSpace(r.URL.Query().Get("output-file"))
+	}
+	if _, ok := r.URL.Query()["output-data"]; ok {
+		outputData = strings.TrimSpace(r.URL.Query().Get("output-data"))
 	}
 	if _, ok := r.URL.Query()["indent"]; ok {
 		indent = strings.TrimSpace(r.URL.Query().Get("indent"))
 	}
-	if len(outputFile) == 0 {
-		sendAPIResponse(w, r, errors.New("Invalid or missing output_file"), "", http.StatusBadRequest)
-		return
+
+	if outputData != "1" {
+		var err error
+		outputFile, err = validateBackupFile(outputFile)
+		if err != nil {
+			sendAPIResponse(w, r, err, "", http.StatusBadRequest)
+			return
+		}
+
+		err = os.MkdirAll(filepath.Dir(outputFile), 0700)
+		if err != nil {
+			logger.Warn(logSender, "", "dumping data error: %v, output file: %#v", err, outputFile)
+			sendAPIResponse(w, r, err, "", getRespStatus(err))
+			return
+		}
+		logger.Debug(logSender, "", "dumping data to: %#v", outputFile)
 	}
-	if filepath.IsAbs(outputFile) {
-		sendAPIResponse(w, r, fmt.Errorf("Invalid output_file %#v: it must be a relative path", outputFile), "", http.StatusBadRequest)
-		return
-	}
-	if strings.Contains(outputFile, "..") {
-		sendAPIResponse(w, r, fmt.Errorf("Invalid output_file %#v", outputFile), "", http.StatusBadRequest)
-		return
-	}
-	outputFile = filepath.Join(backupsPath, outputFile)
-	err := os.MkdirAll(filepath.Dir(outputFile), 0700)
-	if err != nil {
-		logger.Warn(logSender, "", "dumping data error: %v, output file: %#v", err, outputFile)
-		sendAPIResponse(w, r, err, "", getRespStatus(err))
-		return
-	}
-	logger.Debug(logSender, "", "dumping data to: %#v", outputFile)
 
 	backup, err := dataprovider.DumpData()
 	if err != nil {
@@ -52,6 +68,13 @@ func dumpData(w http.ResponseWriter, r *http.Request) {
 		sendAPIResponse(w, r, err, "", getRespStatus(err))
 		return
 	}
+
+	if outputData == "1" {
+		w.Header().Set("Content-Disposition", "attachment; filename=\"sftpgo-backup.json\"")
+		render.JSON(w, r, backup)
+		return
+	}
+
 	var dump []byte
 	if indent == "1" {
 		dump, err = json.MarshalIndent(backup, "", "  ")
@@ -68,6 +91,28 @@ func dumpData(w http.ResponseWriter, r *http.Request) {
 	}
 	logger.Debug(logSender, "", "dumping data completed, output file: %#v, error: %v", outputFile, err)
 	sendAPIResponse(w, r, err, "Data saved", http.StatusOK)
+}
+
+func loadDataFromRequest(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, MaxRestoreSize)
+	_, scanQuota, mode, err := getLoaddataOptions(r)
+	if err != nil {
+		sendAPIResponse(w, r, err, "", http.StatusBadRequest)
+		return
+	}
+
+	content, err := ioutil.ReadAll(r.Body)
+	if err != nil || len(content) == 0 {
+		if len(content) == 0 {
+			err = dataprovider.NewValidationError("request body is required")
+		}
+		sendAPIResponse(w, r, err, "", getRespStatus(err))
+		return
+	}
+	if err := restoreBackup(content, "", scanQuota, mode); err != nil {
+		sendAPIResponse(w, r, err, "", getRespStatus(err))
+	}
+	sendAPIResponse(w, r, err, "Data restored", http.StatusOK)
 }
 
 func loadData(w http.ResponseWriter, r *http.Request) {
@@ -96,24 +141,34 @@ func loadData(w http.ResponseWriter, r *http.Request) {
 		sendAPIResponse(w, r, err, "", getRespStatus(err))
 		return
 	}
+	if err := restoreBackup(content, inputFile, scanQuota, mode); err != nil {
+		sendAPIResponse(w, r, err, "", getRespStatus(err))
+	}
+	sendAPIResponse(w, r, err, "Data restored", http.StatusOK)
+}
+
+func restoreBackup(content []byte, inputFile string, scanQuota, mode int) error {
 	dump, err := dataprovider.ParseDumpData(content)
 	if err != nil {
-		sendAPIResponse(w, r, err, fmt.Sprintf("Unable to parse input file: %#v", inputFile), http.StatusBadRequest)
-		return
+		return dataprovider.NewValidationError(fmt.Sprintf("Unable to parse backup content: %v", err))
 	}
 
 	if err = RestoreFolders(dump.Folders, inputFile, scanQuota); err != nil {
-		sendAPIResponse(w, r, err, "", getRespStatus(err))
-		return
+		return err
 	}
 
 	if err = RestoreUsers(dump.Users, inputFile, mode, scanQuota); err != nil {
-		sendAPIResponse(w, r, err, "", getRespStatus(err))
-		return
+		return err
 	}
 
-	logger.Debug(logSender, "", "backup restored, users: %v", len(dump.Users))
-	sendAPIResponse(w, r, err, "Data restored", http.StatusOK)
+	if err = RestoreAdmins(dump.Admins, inputFile, mode); err != nil {
+		return err
+	}
+
+	logger.Debug(logSender, "", "backup restored, users: %v, folders: %v, admins: %vs",
+		len(dump.Users), len(dump.Folders), len(dump.Admins))
+
+	return nil
 }
 
 func getLoaddataOptions(r *http.Request) (string, int, int, error) {
@@ -121,19 +176,21 @@ func getLoaddataOptions(r *http.Request) (string, int, int, error) {
 	var err error
 	scanQuota := 0
 	restoreMode := 0
-	if _, ok := r.URL.Query()["input_file"]; ok {
-		inputFile = strings.TrimSpace(r.URL.Query().Get("input_file"))
+	if _, ok := r.URL.Query()["input-file"]; ok {
+		inputFile = strings.TrimSpace(r.URL.Query().Get("input-file"))
 	}
-	if _, ok := r.URL.Query()["scan_quota"]; ok {
-		scanQuota, err = strconv.Atoi(r.URL.Query().Get("scan_quota"))
+	if _, ok := r.URL.Query()["scan-quota"]; ok {
+		scanQuota, err = strconv.Atoi(r.URL.Query().Get("scan-quota"))
 		if err != nil {
 			err = fmt.Errorf("invalid scan_quota: %v", err)
+			return inputFile, scanQuota, restoreMode, err
 		}
 	}
 	if _, ok := r.URL.Query()["mode"]; ok {
 		restoreMode, err = strconv.Atoi(r.URL.Query().Get("mode"))
 		if err != nil {
 			err = fmt.Errorf("invalid mode: %v", err)
+			return inputFile, scanQuota, restoreMode, err
 		}
 	}
 	return inputFile, scanQuota, restoreMode, err
@@ -147,8 +204,9 @@ func RestoreFolders(folders []vfs.BaseVirtualFolder, inputFile string, scanQuota
 			logger.Debug(logSender, "", "folder %#v already exists, restore not needed", folder.MappedPath)
 			continue
 		}
+		folder := folder // pin
 		folder.Users = nil
-		err = dataprovider.AddFolder(folder)
+		err = dataprovider.AddFolder(&folder)
 		logger.Debug(logSender, "", "adding new folder: %+v, dump file: %#v, error: %v", folder, inputFile, err)
 		if err != nil {
 			return err
@@ -163,9 +221,37 @@ func RestoreFolders(folders []vfs.BaseVirtualFolder, inputFile string, scanQuota
 	return nil
 }
 
+// RestoreAdmins restores the specified admins
+func RestoreAdmins(admins []dataprovider.Admin, inputFile string, mode int) error {
+	for _, admin := range admins {
+		admin := admin // pin
+		a, err := dataprovider.AdminExists(admin.Username)
+		if err == nil {
+			if mode == 1 {
+				logger.Debug(logSender, "", "loaddata mode 1, existing admin %#v not updated", a.Username)
+				continue
+			}
+			admin.ID = a.ID
+			err = dataprovider.UpdateAdmin(&admin)
+			admin.Password = redactedSecret
+			logger.Debug(logSender, "", "restoring existing admin: %+v, dump file: %#v, error: %v", admin, inputFile, err)
+		} else {
+			err = dataprovider.AddAdmin(&admin)
+			admin.Password = redactedSecret
+			logger.Debug(logSender, "", "adding new admin: %+v, dump file: %#v, error: %v", admin, inputFile, err)
+		}
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // RestoreUsers restores the specified users
 func RestoreUsers(users []dataprovider.User, inputFile string, mode, scanQuota int) error {
 	for _, user := range users {
+		user := user // pin
 		u, err := dataprovider.UserExists(user.Username)
 		if err == nil {
 			if mode == 1 {
@@ -173,15 +259,15 @@ func RestoreUsers(users []dataprovider.User, inputFile string, mode, scanQuota i
 				continue
 			}
 			user.ID = u.ID
-			err = dataprovider.UpdateUser(user)
-			user.Password = "[redacted]"
+			err = dataprovider.UpdateUser(&user)
+			user.Password = redactedSecret
 			logger.Debug(logSender, "", "restoring existing user: %+v, dump file: %#v, error: %v", user, inputFile, err)
 			if mode == 2 && err == nil {
 				disconnectUser(user.Username)
 			}
 		} else {
-			err = dataprovider.AddUser(user)
-			user.Password = "[redacted]"
+			err = dataprovider.AddUser(&user)
+			user.Password = redactedSecret
 			logger.Debug(logSender, "", "adding new user: %+v, dump file: %#v, error: %v", user, inputFile, err)
 		}
 		if err != nil {

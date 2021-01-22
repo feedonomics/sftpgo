@@ -47,7 +47,7 @@ func (s *Service) StartPortableMode(sftpdPort, ftpPort, webdavPort int, enabledS
 	dataProviderConf.PreferDatabaseCredentials = true
 	config.SetProviderConf(dataProviderConf)
 	httpdConf := config.GetHTTPDConfig()
-	httpdConf.BindPort = 0
+	httpdConf.Bindings = nil
 	config.SetHTTPDConfig(httpdConf)
 	sftpdConf := config.GetSFTPDConfig()
 	sftpdConf.MaxAuthTries = 12
@@ -245,7 +245,7 @@ func (s *Service) configurePortableUser() string {
 	if len(s.PortableUser.Password) > 0 {
 		printablePassword = "[redacted]"
 	}
-	if len(s.PortableUser.PublicKeys) == 0 && len(s.PortableUser.Password) == 0 {
+	if len(s.PortableUser.PublicKeys) == 0 && s.PortableUser.Password == "" {
 		var b strings.Builder
 		for i := 0; i < 8; i++ {
 			b.WriteRune(chars[rand.Intn(len(chars))])
