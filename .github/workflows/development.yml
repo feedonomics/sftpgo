@@ -2,7 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [master]
+    branches:
+      - master
+      - stage
   pull_request:
 
 jobs:
@@ -47,7 +49,7 @@ jobs:
         run: go test -v -p 1 -timeout 10m ./... -coverprofile=coverage.txt -covermode=atomic
 
       - name: Upload coverage to Codecov
-        if: ${{ matrix.upload-coverage }}
+        if: ${{ matrix.upload-coverage }} && ${{ github.ref == 'ref/head/master' }}
         uses: codecov/codecov-action@v1
         with:
           file: ./coverage.txt
