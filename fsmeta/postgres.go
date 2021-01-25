@@ -10,10 +10,11 @@ import (
 )
 
 type fsMetaPostgres struct {
-	DB     *sql.DB
-	S3     Getter
-	loaded Getter
-	Bucket string
+	DB            *sql.DB
+	S3            Getter
+	loaded        Getter
+	Bucket        string
+	folderIDCache map[string]uint64
 }
 
 type postgresS3Factory struct {
@@ -22,10 +23,11 @@ type postgresS3Factory struct {
 
 func (p postgresS3Factory) New(S3 S3API, Bucket string) Provider {
 	return &fsMetaPostgres{
-		DB:     p.DB,
-		S3:     NewS3Provider(S3, Bucket),
-		loaded: emptyCache,
-		Bucket: Bucket,
+		DB:            p.DB,
+		S3:            NewS3Provider(S3, Bucket),
+		loaded:        emptyCache,
+		Bucket:        Bucket,
+		folderIDCache: make(map[string]uint64),
 	}
 }
 
@@ -106,9 +108,15 @@ func (Provider *fsMetaPostgres) Put(ctx context.Context, Meta Meta) error {
 }
 
 func (Provider *fsMetaPostgres) getFolderID(ctx context.Context, v string) (uint64, error) {
+	if ID, ok := Provider.folderIDCache[v]; ok {
+		return ID, nil
+	}
 	var FolderKey uint64
 	Row := Provider.DB.QueryRowContext(ctx, `SELECT id FROM fsmeta_folders WHERE path=$1`, Provider.formatPath(v))
 	err := Row.Scan(&FolderKey)
+	if err == nil {
+		Provider.folderIDCache[v] = FolderKey
+	}
 	return FolderKey, err
 }
 
@@ -119,6 +127,8 @@ func (Provider *fsMetaPostgres) createFolder(ctx context.Context, v string) (uin
 	if err == sql.ErrNoRows {
 		// ON CONFLICT DO NOTHING: Causes empty result set.
 		return Provider.getFolderID(ctx, v)
+	} else if err == nil {
+		Provider.folderIDCache[v] = folderID
 	}
 	return folderID, err
 }

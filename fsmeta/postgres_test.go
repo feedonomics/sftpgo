@@ -44,8 +44,9 @@ func (Suite *PostgresSuite) AfterTest(_, _ string) {
 
 func (Suite *PostgresSuite) TestGetFolderID() {
 	Provider := &fsMetaPostgres{
-		DB:     Suite.DB,
-		Bucket: "sftpgo",
+		DB:            Suite.DB,
+		Bucket:        "sftpgo",
+		folderIDCache: make(map[string]uint64),
 	}
 
 	Suite.mockFolderIDQuery(`s3://sftpgo/users/test1/`, 153)
@@ -57,8 +58,9 @@ func (Suite *PostgresSuite) TestGetFolderID() {
 
 func (Suite *PostgresSuite) TestCreateFolderNoConflict() {
 	Provider := &fsMetaPostgres{
-		DB:     Suite.DB,
-		Bucket: "sftpgo",
+		DB:            Suite.DB,
+		Bucket:        "sftpgo",
+		folderIDCache: make(map[string]uint64),
 	}
 
 	Suite.mockCreateFolderQuery(`s3://sftpgo/users/test1/`, 187)
@@ -70,8 +72,9 @@ func (Suite *PostgresSuite) TestCreateFolderNoConflict() {
 
 func (Suite *PostgresSuite) TestCreateFolderConflict() {
 	Provider := &fsMetaPostgres{
-		DB:     Suite.DB,
-		Bucket: "sftpgo",
+		DB:            Suite.DB,
+		Bucket:        "sftpgo",
+		folderIDCache: make(map[string]uint64),
 	}
 
 	Suite.mockCreateFolderQuery(`s3://sftpgo/users/test1/`)
@@ -123,7 +126,6 @@ func (Suite *PostgresSuite) TestPreload() {
 		WillReturnRows(Rows)
 
 	// Database Mocks for test2.csv
-	Suite.mockFolderIDQuery(`s3://sftpgo/users/test2/`, 15)
 	Suite.SQLMock.ExpectExec(regexp.QuoteMeta(`INSERT INTO fsmeta_files `+
 		`(folder_id, filename, uploaded, filesize, etag, last_modified) VALUES ($1, $2, $3, $4, $5, $6) `+
 		`ON CONFLICT (folder_id, filename) DO UPDATE `+
@@ -132,7 +134,6 @@ func (Suite *PostgresSuite) TestPreload() {
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	// Database Mocks for test3.csv
-	Suite.mockFolderIDQuery(`s3://sftpgo/users/test2/`, 15)
 	Suite.SQLMock.ExpectExec(regexp.QuoteMeta(`INSERT INTO fsmeta_files `+
 		`(folder_id, filename, uploaded, filesize, etag, last_modified) VALUES ($1, $2, $3, $4, $5, $6) `+
 		`ON CONFLICT (folder_id, filename) DO UPDATE `+
