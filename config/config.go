@@ -13,6 +13,7 @@ import (
 
 	"github.com/drakkan/sftpgo/common"
 	"github.com/drakkan/sftpgo/dataprovider"
+	"github.com/drakkan/sftpgo/fsmeta"
 	"github.com/drakkan/sftpgo/ftpd"
 	"github.com/drakkan/sftpgo/httpclient"
 	"github.com/drakkan/sftpgo/httpd"
@@ -77,6 +78,7 @@ type globalConfig struct {
 	HTTPConfig      httpclient.Config     `json:"http" mapstructure:"http"`
 	KMSConfig       kms.Configuration     `json:"kms" mapstructure:"kms"`
 	TelemetryConfig telemetry.Conf        `json:"telemetry" mapstructure:"telemetry"`
+	FSMetaConfig    fsmeta.Config         `json:"fsmeta" mapstructure:"fsmeta"`
 }
 
 func init() {
@@ -235,6 +237,9 @@ func Init() {
 			CertificateFile:    "",
 			CertificateKeyFile: "",
 		},
+		FSMetaConfig: fsmeta.Config{
+			Enabled: false,
+		},
 	}
 
 	viper.SetEnvPrefix(configEnvPrefix)
@@ -329,6 +334,10 @@ func GetTelemetryConfig() telemetry.Conf {
 // SetTelemetryConfig sets the telemetry configuration
 func SetTelemetryConfig(config telemetry.Conf) {
 	globalConf.TelemetryConfig = config
+}
+
+func GetFSMetaConfig() fsmeta.Config {
+	return globalConf.FSMetaConfig
 }
 
 // HasServicesToStart returns true if the config defines at least a service to start.
@@ -859,6 +868,16 @@ func setViperDefaults() {
 	viper.SetDefault("telemetry.auth_user_file", globalConf.TelemetryConfig.AuthUserFile)
 	viper.SetDefault("telemetry.certificate_file", globalConf.TelemetryConfig.CertificateFile)
 	viper.SetDefault("telemetry.certificate_key_file", globalConf.TelemetryConfig.CertificateKeyFile)
+	viper.SetDefault("fsmeta.enabled", globalConf.FSMetaConfig.Enabled)
+	viper.SetDefault("fsmeta.driver", globalConf.FSMetaConfig.Driver)
+	viper.SetDefault("fsmeta.database", globalConf.FSMetaConfig.Database)
+	viper.SetDefault("fsmeta.schema", globalConf.FSMetaConfig.Schema)
+	viper.SetDefault("fsmeta.host", globalConf.FSMetaConfig.Host)
+	viper.SetDefault("fsmeta.port", globalConf.FSMetaConfig.Port)
+	viper.SetDefault("fsmeta.username", globalConf.FSMetaConfig.Username)
+	viper.SetDefault("fsmeta.password", globalConf.FSMetaConfig.Password)
+	viper.SetDefault("fsmeta.sslmode", globalConf.FSMetaConfig.SSLMode)
+	viper.SetDefault("fsmeta.pool_size", globalConf.FSMetaConfig.PoolSize)
 }
 
 func lookupBoolFromEnv(envName string) (bool, bool) {

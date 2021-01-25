@@ -183,5 +183,16 @@
       "url": "",
       "master_key_path": ""
     }
+  },
+  "fsmeta": {
+    "enabled": false,
+    "driver": "postgresql",
+    "database": "",
+    "schema": "",
+    "host": "",
+    "port": 0,
+    "username": "",
+    "password": "",
+    "sslmode": 0
   }
 }
