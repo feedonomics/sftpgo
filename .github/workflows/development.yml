@@ -2,7 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [master]
+    branches:
+      - master
+      - stage
   pull_request:
 
 jobs:
@@ -14,13 +16,13 @@ jobs:
         go: [1.15]
         os: [ubuntu-latest, macos-latest]
         upload-coverage: [true]
-        include:
+        #include:
           #- go: 1.14
           #  os: ubuntu-latest
           #  upload-coverage: false
-          - go: 1.15
-            os: windows-latest
-            upload-coverage: false
+          #- go: 1.15
+          #  os: windows-latest
+          #  upload-coverage: false
 
     steps:
       - uses: actions/checkout@v2
@@ -47,7 +49,7 @@ jobs:
         run: go test -v -p 1 -timeout 10m ./... -coverprofile=coverage.txt -covermode=atomic
 
       - name: Upload coverage to Codecov
-        if: ${{ matrix.upload-coverage }}
+        if: ${{ matrix.upload-coverage }} && ${{ github.ref == 'ref/head/master' }}
         uses: codecov/codecov-action@v1
         with:
           file: ./coverage.txt

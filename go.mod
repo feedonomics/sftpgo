@@ -6,6 +6,7 @@ require (
 	cloud.google.com/go v0.76.0 // indirect
 	cloud.google.com/go/storage v1.13.0
 	github.com/Azure/azure-storage-blob-go v0.13.0
+	github.com/DATA-DOG/go-sqlmock v1.5.0
 	github.com/GehirnInc/crypt v0.0.0-20200316065508-bb7000b8a962
 	github.com/alexedwards/argon2id v0.0.0-20201228115903-cf543ebc1f7b
 	github.com/aws/aws-sdk-go v1.37.6
@@ -18,6 +19,8 @@ require (
 	github.com/go-chi/render v1.0.1
 	github.com/go-ole/go-ole v1.2.5 // indirect
 	github.com/go-sql-driver/mysql v1.5.0
+	github.com/golang-migrate/migrate/v4 v4.14.1
+	github.com/golang/mock v1.4.4
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/google/uuid v1.2.0 // indirect
 	github.com/google/wire v0.5.0 // indirect
