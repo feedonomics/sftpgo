@@ -110,9 +110,29 @@ func TestS3Retryer_RetryRules(t *testing.T) {
 func TestS3Retryer_isAwsRequestError(t *testing.T) {
 	_before()
 
-	assert.False(t, isAwsRequestError(testUploadPartRequest))
+	assert.False(t, isAwsConnectionError(nil))
+
+	assert.False(t, isAwsConnectionError(testUploadPartRequest.Error))
 	testUploadPartRequest.Error = testNonMatchingError
-	assert.False(t, isAwsRequestError(testUploadPartRequest))
+	assert.False(t, isAwsConnectionError(testUploadPartRequest.Error))
 	testUploadPartRequest.Error = testMatchingError
-	assert.True(t, isAwsRequestError(testUploadPartRequest))
+	assert.True(t, isAwsConnectionError(testUploadPartRequest.Error))
+}
+
+func TestS3Retryer_isCustomRetryOperation(t *testing.T) {
+	_before()
+
+	for _, scenario := range []struct {
+		operation string
+		expected  bool
+	}{
+		{`UploadPart`, true},
+		{`GetObject`, false},
+		{`AbortMultipartUpload`, false},
+		{`HeadObject`, false},
+		{`ListObjectsV2`, false},
+		{``, false},
+	} {
+		assert.Equal(t, scenario.expected, isCustomRetryOperation(scenario.operation))
+	}
 }
