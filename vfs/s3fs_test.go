@@ -2,6 +2,9 @@ package vfs
 
 import (
 	"database/sql"
+	"github.com/aws/aws-sdk-go/aws/client"
+	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/drakkan/sftpgo/retry"
 	"regexp"
 	"testing"
 	"time"
@@ -61,6 +64,34 @@ func (Suite *S3FsSuite) AfterTest(_, _ string) {
 	if err := Suite.SQLMock.ExpectationsWereMet(); err != nil {
 		Suite.FailNowf(`sqlmock`, `unfulfilled expectations: %s`, err)
 	}
+}
+
+func (Suite *S3FsSuite) TestNewS3FsDefaults() {
+	config := S3FsConfig{
+		Bucket: "test",
+		Region: "local",
+	}
+
+	fs, err := NewS3Fs("test-conn-id", "/tmp", config)
+	Suite.Nil(err)
+	Suite.IsType(&S3Fs{}, fs)
+
+	s3Fs := fs.(*S3Fs)
+	Suite.IsType(&s3.S3{}, s3Fs.svc)
+
+	s3Client := s3Fs.svc.(*s3.S3)
+	Suite.IsType(retry.S3Retryer{}, s3Client.Config.Retryer)
+
+	s3Retryer := s3Client.Config.Retryer.(retry.S3Retryer)
+	Suite.Equal(5, s3Retryer.NumMaxRetries)
+	Suite.Equal(client.DefaultRetryerMinRetryDelay, s3Retryer.MinRetryDelay)
+	Suite.Equal(client.DefaultRetryerMinThrottleDelay, s3Retryer.MinThrottleDelay)
+	Suite.Equal(client.DefaultRetryerMaxRetryDelay, s3Retryer.MaxRetryDelay)
+	Suite.Equal(client.DefaultRetryerMaxThrottleDelay, s3Retryer.MaxThrottleDelay)
+
+	Suite.Equal(s3manager.DefaultUploadPartSize, s3Fs.config.UploadPartSize)
+	Suite.Equal(2, s3Fs.config.UploadConcurrency)
+	Suite.Equal(0, s3Fs.config.UploadPartMaxTime)
 }
 
 func (Suite *S3FsSuite) TestStat() {

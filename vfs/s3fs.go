@@ -6,6 +6,8 @@ package vfs
 import (
 	"context"
 	"fmt"
+	"github.com/aws/aws-sdk-go/aws/client"
+	"github.com/drakkan/sftpgo/retry"
 	"mime"
 	"net/url"
 	"os"
@@ -60,6 +62,16 @@ func NewS3Fs(connectionID, localTempDir string, config S3FsConfig) (Fs, error) {
 		return fs, err
 	}
 	awsConfig := aws.NewConfig()
+
+	awsConfig.Retryer = retry.S3Retryer{
+		DefaultRetryer: client.DefaultRetryer{
+			NumMaxRetries:    5,
+			MinRetryDelay:    client.DefaultRetryerMinRetryDelay,
+			MinThrottleDelay: client.DefaultRetryerMinThrottleDelay,
+			MaxRetryDelay:    client.DefaultRetryerMaxRetryDelay,
+			MaxThrottleDelay: client.DefaultRetryerMaxThrottleDelay,
+		},
+	}
 
 	if fs.config.Region != "" {
 		awsConfig.WithRegion(fs.config.Region)
