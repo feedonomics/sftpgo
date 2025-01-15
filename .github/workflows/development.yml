@@ -15,7 +15,7 @@ jobs:
     strategy:
       matrix:
         go: [1.20.3]
-        os: [ubuntu-20.04, macos-latest]
+        os: [ubuntu-20.04, macos-15]
         upload-coverage: [true]
 
     steps:
@@ -31,6 +31,7 @@ jobs:
       - name: Build for Linux/macOS
         if: startsWith(matrix.os, 'windows-') != true
         run: go build -ldflags "-s -w -X github.com/drakkan/sftpgo/version.commit=`git describe --always --dirty` -X github.com/drakkan/sftpgo/version.date=`date -u +%FT%TZ`" -o sftpgo
+        # run: go build -trimpath -tags nopgxregisterdefaulttypes,disable_grpc_modules -ldflags "-s -w -X github.com/drakkan/sftpgo/v2/internal/version.commit=`git describe --always --abbrev=8 --dirty` -X github.com/drakkan/sftpgo/v2/internal/version.date=`date -u +%FT%TZ`" -o sftpgo
 
       - name: Build for Windows
         if: startsWith(matrix.os, 'windows-')
@@ -123,7 +124,7 @@ jobs:
           xcopy .\static .\output\static\ /E
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: sftpgo-${{ matrix.os }}-go${{ matrix.go }}
           path: output
@@ -153,42 +154,42 @@ jobs:
 
       - name: Upload Debian Package
         if: ${{ matrix.upload-coverage && startsWith(matrix.os, 'ubuntu-') }}
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: sftpgo-${{ steps.build_linux_pkgs.outputs.pkg-version }}-x86_64-deb
           path: pkgs/dist/deb/*
 
       - name: Upload RPM Package
         if: ${{ matrix.upload-coverage && startsWith(matrix.os, 'ubuntu-') }}
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: sftpgo-${{ steps.build_linux_pkgs.outputs.pkg-version }}-x86_64-rpm
           path: pkgs/dist/rpm/*
 
       - name: Upload Debian Package arm64
         if: ${{ matrix.upload-coverage && startsWith(matrix.os, 'ubuntu-') }}
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: sftpgo-${{ steps.build_linux_pkgs.outputs.pkg-version }}-arm64-deb
           path: pkgs_arm64/dist/deb/*
 
       - name: Upload RPM Package arm64
         if: ${{ matrix.upload-coverage && startsWith(matrix.os, 'ubuntu-') }}
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: sftpgo-${{ steps.build_linux_pkgs.outputs.pkg-version }}-arm64-rpm
           path: pkgs_arm64/dist/rpm/*
 
       - name: Upload Debian Package ppc64le
         if: ${{ matrix.upload-coverage && startsWith(matrix.os, 'ubuntu-') }}
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: sftpgo-${{ steps.build_linux_pkgs.outputs.pkg-version }}-ppc64le-deb
           path: pkgs_ppc64le/dist/deb/*
 
       - name: Upload RPM Package ppc64le
         if: ${{ matrix.upload-coverage && startsWith(matrix.os, 'ubuntu-') }}
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: sftpgo-${{ steps.build_linux_pkgs.outputs.pkg-version }}-ppc64le-rpm
           path: pkgs_ppc64le/dist/rpm/*
