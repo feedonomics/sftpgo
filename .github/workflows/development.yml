@@ -8,6 +8,7 @@ on:
       - dev/*/*
   pull_request:
 
+
 jobs:
   test-deploy:
     name: Test and deploy
@@ -123,7 +124,7 @@ jobs:
           xcopy .\static .\output\static\ /E
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: sftpgo-${{ matrix.os }}-go${{ matrix.go }}
           path: output
@@ -153,42 +154,42 @@ jobs:
 
       - name: Upload Debian Package
         if: ${{ matrix.upload-coverage && startsWith(matrix.os, 'ubuntu-') }}
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: sftpgo-${{ steps.build_linux_pkgs.outputs.pkg-version }}-x86_64-deb
           path: pkgs/dist/deb/*
 
       - name: Upload RPM Package
         if: ${{ matrix.upload-coverage && startsWith(matrix.os, 'ubuntu-') }}
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: sftpgo-${{ steps.build_linux_pkgs.outputs.pkg-version }}-x86_64-rpm
           path: pkgs/dist/rpm/*
 
       - name: Upload Debian Package arm64
         if: ${{ matrix.upload-coverage && startsWith(matrix.os, 'ubuntu-') }}
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: sftpgo-${{ steps.build_linux_pkgs.outputs.pkg-version }}-arm64-deb
           path: pkgs_arm64/dist/deb/*
 
       - name: Upload RPM Package arm64
         if: ${{ matrix.upload-coverage && startsWith(matrix.os, 'ubuntu-') }}
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: sftpgo-${{ steps.build_linux_pkgs.outputs.pkg-version }}-arm64-rpm
           path: pkgs_arm64/dist/rpm/*
 
       - name: Upload Debian Package ppc64le
         if: ${{ matrix.upload-coverage && startsWith(matrix.os, 'ubuntu-') }}
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: sftpgo-${{ steps.build_linux_pkgs.outputs.pkg-version }}-ppc64le-deb
           path: pkgs_ppc64le/dist/deb/*
 
       - name: Upload RPM Package ppc64le
         if: ${{ matrix.upload-coverage && startsWith(matrix.os, 'ubuntu-') }}
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: sftpgo-${{ steps.build_linux_pkgs.outputs.pkg-version }}-ppc64le-rpm
           path: pkgs_ppc64le/dist/rpm/*
