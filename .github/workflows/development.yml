@@ -2,7 +2,10 @@ name: CI
 
 on:
   push:
-    branches: [2.0.x]
+    branches:
+      - master
+      - stage
+      - dev/*/*
   pull_request:
 
 jobs:
@@ -11,9 +14,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        go: [1.16]
-        os: [ubuntu-18.04, macos-10.15, windows-2019]
-        upload-coverage: [false]
+        go: [1.20.3]
+        os: [ubuntu-20.04, macos-latest]
+        upload-coverage: [true]
 
     steps:
       - uses: actions/checkout@v2
@@ -76,9 +79,9 @@ jobs:
 
       - name: Cross build with xgo
         if: ${{ matrix.upload-coverage && startsWith(matrix.os, 'ubuntu-') }}
-        uses: crazy-max/ghaction-xgo@v1
+        uses: crazy-max/ghaction-xgo@v2
         with:
-          go_version: 1.16.x
+          go_version: 1.20.3
           dest: cross
           prefix: sftpgo
           targets: linux/arm64,linux/ppc64le
@@ -192,7 +195,7 @@ jobs:
 
   test-postgresql-mysql:
     name: Test with PostgreSQL/MySQL
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
 
     services:
       postgres:
@@ -216,7 +219,7 @@ jobs:
           MYSQL_USER: sftpgo
           MYSQL_PASSWORD: sftpgo
         options: >-
-          --health-cmd "mysqladmin status -h 127.0.0.1 -P 3306 -u root -p$MYSQL_ROOT_PASSWORD"
+          --health-cmd "mariadb-admin status -h 127.0.0.1 -P 3306 -u root -p$MYSQL_ROOT_PASSWORD"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 6
@@ -229,7 +232,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v2
         with:
-          go-version: 1.16
+          go-version: 1.20.3
 
       - name: Build
         run: go build -ldflags "-s -w -X github.com/drakkan/sftpgo/version.commit=`git describe --always --dirty` -X github.com/drakkan/sftpgo/version.date=`date -u +%FT%TZ`" -o sftpgo
@@ -258,10 +261,11 @@ jobs:
 
   golangci-lint:
     name: golangci-lint
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v2
         with:
-          version: v1.37.1
+          version: latest
+        continue-on-error: true

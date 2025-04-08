@@ -5,7 +5,7 @@ on:
     tags: 'v*'
 
 env:
-  GO_VERSION: 1.16.3
+  GO_VERSION: 1.20.3
 
 jobs:
   prepare-sources-with-deps:
@@ -42,7 +42,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macos-10.15, windows-2019]
+        os: [macos-latest]
 
     steps:
       - uses: actions/checkout@v2
@@ -53,7 +53,7 @@ jobs:
 
       - name: Build for macOS
         if: startsWith(matrix.os, 'windows-') != true
-        run: go build -ldflags "-s -w -X github.com/drakkan/sftpgo/version.commit=`git describe --always --dirty` -X github.com/drakkan/sftpgo/version.date=`date -u +%FT%TZ`" -o sftpgo
+        run: CGO_ENABLED=0 go build -ldflags "-s -w -X github.com/drakkan/sftpgo/version.commit=`git describe --always --dirty` -X github.com/drakkan/sftpgo/version.date=`date -u +%FT%TZ`" -o sftpgo
 
       - name: Build for Windows
         if: startsWith(matrix.os, 'windows-')
@@ -61,10 +61,6 @@ jobs:
           $GIT_COMMIT = (git describe --always --dirty) | Out-String
           $DATE_TIME = ([datetime]::Now.ToUniversalTime().toString("yyyy-MM-ddTHH:mm:ssZ")) | Out-String
           go build -ldflags "-s -w -X github.com/drakkan/sftpgo/version.commit=$GIT_COMMIT -X github.com/drakkan/sftpgo/version.date=$DATE_TIME" -o sftpgo.exe
-
-      - name: Initialize data provider
-        run: ./sftpgo initprovider
-        shell: bash
 
       - name: Get SFTPGo version
         id: get_version
@@ -94,7 +90,6 @@ jobs:
           cp LICENSE output/
           cp sftpgo output/
           cp sftpgo.json output/
-          cp sftpgo.db output/sqlite/
           cp -r static output/
           cp -r templates output/
           cp init/com.github.drakkan.sftpgo.plist output/init/
@@ -115,7 +110,6 @@ jobs:
           mkdir output
           copy .\sftpgo.exe .\output
           copy .\sftpgo.json .\output
-          copy .\sftpgo.db .\output
           copy .\LICENSE .\output\LICENSE.txt
           mkdir output\templates
           xcopy .\templates .\output\templates\ /E
@@ -132,7 +126,6 @@ jobs:
           mkdir win-portable
           copy .\sftpgo.exe .\win-portable
           copy .\sftpgo.json .\win-portable
-          copy .\sftpgo.db .\win-portable
           copy .\LICENSE .\win-portable\LICENSE.txt
           mkdir win-portable\templates
           xcopy .\templates .\win-portable\templates\ /E
@@ -169,7 +162,7 @@ jobs:
 
   prepare-linux:
     name: Prepare Linux binaries
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
     strategy:
       matrix:
         include:
@@ -178,18 +171,6 @@ jobs:
             deb-arch: amd64
             rpm-arch: x86_64
             tar-arch: x86_64
-          - arch: aarch64
-            distro: ubuntu18.04
-            go-arch: arm64
-            deb-arch: arm64
-            rpm-arch: aarch64
-            tar-arch: arm64
-          - arch: ppc64le
-            distro: ubuntu18.04
-            go-arch: ppc64le
-            deb-arch: ppc64el
-            rpm-arch: ppc64le
-            tar-arch: ppc64le
 
     steps:
       - uses: actions/checkout@v2
@@ -211,7 +192,7 @@ jobs:
       - name: Build on amd64
         if: ${{ matrix.arch == 'amd64' }}
         run: |
-          go build -ldflags "-s -w -X github.com/drakkan/sftpgo/version.commit=`git describe --always --dirty` -X github.com/drakkan/sftpgo/version.date=`date -u +%FT%TZ`" -o sftpgo
+          CGO_ENABLED=0 go build -ldflags "-s -w -X github.com/drakkan/sftpgo/version.commit=`git describe --always --dirty` -X github.com/drakkan/sftpgo/version.date=`date -u +%FT%TZ`" -o sftpgo
           mkdir -p output/{init,sqlite,bash_completion,zsh_completion}
           echo "For documentation please take a look here:" > output/README.txt
           echo "" >> output/README.txt
@@ -221,13 +202,11 @@ jobs:
           cp -r templates output/
           cp -r static output/
           cp init/sftpgo.service output/init/
-          ./sftpgo initprovider
           ./sftpgo gen completion bash > output/bash_completion/sftpgo
           ./sftpgo gen completion zsh > output/zsh_completion/_sftpgo
           ./sftpgo gen man -d output/man/man1
           gzip output/man/man1/*
           cp sftpgo output/
-          cp sftpgo.db output/sqlite/
           cd output
           tar cJvf sftpgo_${SFTPGO_VERSION}_linux_${{ matrix.tar-arch }}.tar.xz *
           cd ..
@@ -323,27 +302,12 @@ jobs:
         with:
           name: sftpgo_${{ steps.get_version.outputs.SFTPGO_VERSION }}_linux_x86_64.tar.xz
 
-      - name: Download arm64 artifact
-        uses: actions/download-artifact@v2
-        with:
-          name: sftpgo_${{ steps.get_version.outputs.SFTPGO_VERSION }}_linux_arm64.tar.xz
-
-      - name: Download ppc64le artifact
-        uses: actions/download-artifact@v2
-        with:
-          name: sftpgo_${{ steps.get_version.outputs.SFTPGO_VERSION }}_linux_ppc64le.tar.xz
-
       - name: Build bundle
         shell: bash
         run: |
           mkdir -p bundle/{arm64,ppc64le}
           cd bundle
           tar xvf ../sftpgo_${SFTPGO_VERSION}_linux_x86_64.tar.xz
-          cd arm64
-          tar xvf ../../sftpgo_${SFTPGO_VERSION}_linux_arm64.tar.xz sftpgo
-          cd ../ppc64le
-          tar xvf ../../sftpgo_${SFTPGO_VERSION}_linux_ppc64le.tar.xz sftpgo
-          cd ..
           tar cJvf sftpgo_${SFTPGO_VERSION}_linux_bundle.tar.xz *
           cd ..
         env:
@@ -377,65 +341,25 @@ jobs:
         with:
           name: sftpgo_${{ steps.get_version.outputs.SFTPGO_VERSION }}_linux_x86_64.tar.xz
 
-      - name: Download arm64 artifact
-        uses: actions/download-artifact@v2
-        with:
-          name: sftpgo_${{ steps.get_version.outputs.SFTPGO_VERSION }}_linux_arm64.tar.xz
-
-      - name: Download ppc64le artifact
-        uses: actions/download-artifact@v2
-        with:
-          name: sftpgo_${{ steps.get_version.outputs.SFTPGO_VERSION }}_linux_ppc64le.tar.xz
+#      - name: Download arm64 artifact
+#        uses: actions/download-artifact@v2
+#        with:
+#          name: sftpgo_${{ steps.get_version.outputs.SFTPGO_VERSION }}_linux_arm64.tar.xz
+#
+#      - name: Download ppc64le artifact
+#        uses: actions/download-artifact@v2
+#        with:
+#          name: sftpgo_${{ steps.get_version.outputs.SFTPGO_VERSION }}_linux_ppc64le.tar.xz
 
       - name: Download Linux bundle artifact
         uses: actions/download-artifact@v2
         with:
           name: sftpgo_${{ steps.get_version.outputs.SFTPGO_VERSION }}_linux_bundle.tar.xz
 
-      - name: Download Deb amd64 artifact
-        uses: actions/download-artifact@v2
-        with:
-          name: sftpgo_${{ steps.get_version.outputs.PKG_VERSION }}-1_amd64.deb
-
-      - name: Download Deb arm64 artifact
-        uses: actions/download-artifact@v2
-        with:
-          name: sftpgo_${{ steps.get_version.outputs.PKG_VERSION }}-1_arm64.deb
-
-      - name: Download Deb ppc64le artifact
-        uses: actions/download-artifact@v2
-        with:
-          name: sftpgo_${{ steps.get_version.outputs.PKG_VERSION }}-1_ppc64el.deb
-
-      - name: Download RPM x86_64 artifact
-        uses: actions/download-artifact@v2
-        with:
-          name: sftpgo-${{ steps.get_version.outputs.PKG_VERSION }}-1.x86_64.rpm
-
-      - name: Download RPM aarch64 artifact
-        uses: actions/download-artifact@v2
-        with:
-          name: sftpgo-${{ steps.get_version.outputs.PKG_VERSION }}-1.aarch64.rpm
-
-      - name: Download RPM ppc64le artifact
-        uses: actions/download-artifact@v2
-        with:
-          name: sftpgo-${{ steps.get_version.outputs.PKG_VERSION }}-1.ppc64le.rpm
-
       - name: Download macOS x86_64 artifact
         uses: actions/download-artifact@v2
         with:
           name: sftpgo_${{ steps.get_version.outputs.SFTPGO_VERSION }}_macOS_x86_64.tar.xz
-
-      - name: Download Windows installer x86_64 artifact
-        uses: actions/download-artifact@v2
-        with:
-          name: sftpgo_${{ steps.get_version.outputs.SFTPGO_VERSION }}_windows_x86_64.exe
-
-      - name: Download Windows portable x86_64 artifact
-        uses: actions/download-artifact@v2
-        with:
-          name: sftpgo_${{ steps.get_version.outputs.SFTPGO_VERSION }}_windows_portable_x86_64.zip
 
       - name: Download source with deps artifact
         uses: actions/download-artifact@v2
@@ -444,14 +368,8 @@ jobs:
 
       - name: Create release
         run: |
-          mv sftpgo_windows_x86_64.exe sftpgo_${SFTPGO_VERSION}_windows_x86_64.exe
-          mv sftpgo_portable_x86_64.zip sftpgo_${SFTPGO_VERSION}_windows_portable_x86_64.zip
           gh release create "${SFTPGO_VERSION}"
           gh release upload "${SFTPGO_VERSION}" sftpgo_*.xz --clobber
-          gh release upload "${SFTPGO_VERSION}" sftpgo-*.rpm --clobber
-          gh release upload "${SFTPGO_VERSION}" sftpgo_*.deb --clobber
-          gh release upload "${SFTPGO_VERSION}" sftpgo_*.exe --clobber
-          gh release upload "${SFTPGO_VERSION}" sftpgo_*.zip --clobber
           gh release view "${SFTPGO_VERSION}"
         env:
           GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}

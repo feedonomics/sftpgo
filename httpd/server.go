@@ -205,7 +205,7 @@ func (s *httpdServer) checkCookieExpiration(w http.ResponseWriter, r *http.Reque
 	if tokenClaims.Username == "" || tokenClaims.Signature == "" {
 		return
 	}
-	if time.Until(token.Expiration()) > tokenRefreshMin {
+	if time.Until(token.Expiration()) > tokenRefreshThreshold {
 		return
 	}
 	admin, err := dataprovider.AdminExists(tokenClaims.Username)
@@ -313,6 +313,7 @@ func (s *httpdServer) initializeRouter() {
 			router.With(checkPerm(dataprovider.PermAdminViewUsers)).Get(userPath+"/{username}", getUserByUsername)
 			router.With(checkPerm(dataprovider.PermAdminChangeUsers)).Put(userPath+"/{username}", updateUser)
 			router.With(checkPerm(dataprovider.PermAdminDeleteUsers)).Delete(userPath+"/{username}", deleteUser)
+			router.With(checkPerm(dataprovider.PermAdminViewUsers)).Post(userS3TranslatePath, userS3Translate)
 			router.With(checkPerm(dataprovider.PermAdminViewUsers)).Get(folderPath, getFolders)
 			router.With(checkPerm(dataprovider.PermAdminViewUsers)).Get(folderPath+"/{name}", getFolderByName)
 			router.With(checkPerm(dataprovider.PermAdminAddUsers)).Post(folderPath, addFolder)
