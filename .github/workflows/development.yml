@@ -10,12 +10,11 @@ on:
 
 env:
   GO_VERSION: '1.20.3'
-  RUN_TARGET: 'ubuntu-latest'
 
 jobs:
   test-deploy:
     name: Test and deploy
-    runs-on: "${{ env.RUN_TARGET }}"
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
@@ -69,7 +68,7 @@ jobs:
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: sftpgo-${{ env.RUN_TARGET }}-go${{ env.GO_VERSION }}
+          name: sftpgo-ubuntu-latest-go${{ env.GO_VERSION }}
           path: output
 
       - name: Build Linux Packages
@@ -94,7 +93,7 @@ jobs:
 
   test-postgresql-mysql:
     name: Test with PostgreSQL/MySQL
-    runs-on: "${{ env.RUN_TARGET }}"
+    runs-on: ubuntu-latest
 
     services:
       postgres:
@@ -160,7 +159,7 @@ jobs:
 
   golangci-lint:
     name: golangci-lint
-    runs-on: "${{ env.RUN_TARGET }}"
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Run golangci-lint
