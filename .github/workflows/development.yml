@@ -15,7 +15,7 @@ env:
 jobs:
   test-deploy:
     name: Test and deploy
-    runs-on: ${{ env.RUN_TARGET }}
+    runs-on: "${{ env.RUN_TARGET }}"
 
     steps:
       - uses: actions/checkout@v4
@@ -94,7 +94,7 @@ jobs:
 
   test-postgresql-mysql:
     name: Test with PostgreSQL/MySQL
-    runs-on: ${{ env.RUN_TARGET }}
+    runs-on: "${{ env.RUN_TARGET }}"
 
     services:
       postgres:
@@ -160,7 +160,7 @@ jobs:
 
   golangci-lint:
     name: golangci-lint
-    runs-on: ${{ env.RUN_TARGET }}
+    runs-on: "${{ env.RUN_TARGET }}"
     steps:
       - uses: actions/checkout@v4
       - name: Run golangci-lint
