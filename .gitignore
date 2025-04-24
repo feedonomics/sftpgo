@@ -27,3 +27,4 @@ coverage.txt
 conf.d/
 .env*
 compose*
+Dockerfile-test*
