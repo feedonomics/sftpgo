@@ -106,7 +106,7 @@ jobs:
           fi
           echo "dockerfile=${DOCKERFILE}" >> "$GITHUB_OUTPUT"
           echo "created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
-          echo "sha::${GITHUB_SHA=8}" >> "$GITHUB_OUTPUT"
+          echo "sha=${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
         env:
           DOCKER_PKG: ${{ matrix.docker_pkg }}
           OPTIONAL_DEPS: ${{ matrix.optional_deps }}
