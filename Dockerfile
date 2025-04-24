@@ -1,4 +1,4 @@
-FROM golang:1.20.3-buster as builder
+FROM golang:1.20.3-buster AS builder
 
 ENV GOFLAGS="-mod=readonly"
 
