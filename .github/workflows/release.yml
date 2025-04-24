@@ -151,15 +151,15 @@ jobs:
       - name: Upload Deb Package
         uses: actions/upload-artifact@v4
         with:
-          name: sftpgo_${{ steps.build_linux_pkgs.outputs.pkg-version }}-1_${{ matrix.deb-arch}}.deb
-          path: ./pkgs/dist/deb/sftpgo_${{ steps.build_linux_pkgs.outputs.pkg-version }}-1_${{ matrix.deb-arch}}.deb
+          name: sftpgo_${{ steps.build_linux_pkgs.outputs.pkg-version }}_${{ matrix.deb-arch}}.deb
+          path: ./pkgs/deb/sftpgo_${{ steps.build_linux_pkgs.outputs.pkg-version }}_${{ matrix.deb-arch}}.deb
           retention-days: 1
 
       - name: Upload RPM Package
         uses: actions/upload-artifact@v4
         with:
-          name: sftpgo-${{ steps.build_linux_pkgs.outputs.pkg-version }}-1.${{ matrix.rpm-arch}}.rpm
-          path: ./pkgs/dist/rpm/sftpgo-${{ steps.build_linux_pkgs.outputs.pkg-version }}-1.${{ matrix.rpm-arch}}.rpm
+          name: sftpgo-${{ steps.build_linux_pkgs.outputs.pkg-version }}.${{ matrix.rpm-arch}}.rpm
+          path: ./pkgs/rpm/sftpgo-${{ steps.build_linux_pkgs.outputs.pkg-version }}.${{ matrix.rpm-arch}}.rpm
           retention-days: 1
 
   prepare-linux-bundle:
