@@ -90,46 +90,6 @@ jobs:
         env:
           SFTPGO_VERSION: ${{ steps.get_version.outputs.SFTPGO_VERSION }}
 
-      - uses: uraimo/run-on-arch-action@v3
-        if: ${{ matrix.arch != 'amd64' }}
-        name: Build for ${{ matrix.arch }}
-        id: build
-        with:
-          arch: ${{ matrix.arch }}
-          distro: ${{ matrix.distro }}
-          setup: |
-            mkdir -p "${PWD}/output"
-          dockerRunArgs: |
-            --volume "${PWD}/output:/output"
-          shell: /bin/bash
-          install: |
-            apt-get update -q -y
-            apt-get install -q -y curl gcc git xz-utils
-            curl --retry 5 --retry-delay 2 --connect-timeout 10 -o go.tar.gz -L https://golang.org/dl/go${{ env.GO_VERSION }}.linux-${{ matrix.go-arch }}.tar.gz
-            tar -C /usr/local -xzf go.tar.gz
-          run: |
-            export PATH=$PATH:/usr/local/go/bin
-            go build -ldflags "-s -w -X github.com/drakkan/sftpgo/version.commit=`git describe --always --dirty` -X github.com/drakkan/sftpgo/version.date=`date -u +%FT%TZ`" -o sftpgo
-            mkdir -p output/{init,sqlite,bash_completion,zsh_completion}
-            echo "For documentation please take a look here:" > output/README.txt
-            echo "" >> output/README.txt
-            echo "https://github.com/drakkan/sftpgo/blob/${{ steps.get_version.outputs.SFTPGO_VERSION }}/README.md" >> output/README.txt
-            cp LICENSE output/
-            cp sftpgo.json output/
-            cp -r templates output/
-            cp -r static output/
-            cp init/sftpgo.service output/init/
-            ./sftpgo initprovider
-            ./sftpgo gen completion bash > output/bash_completion/sftpgo
-            ./sftpgo gen completion zsh > output/zsh_completion/_sftpgo
-            ./sftpgo gen man -d output/man/man1
-            gzip output/man/man1/*
-            cp sftpgo output/
-            cp sftpgo.db output/sqlite/
-            cd output
-            tar cJvf sftpgo_${{ steps.get_version.outputs.SFTPGO_VERSION }}_linux_${{ matrix.tar-arch }}.tar.xz *
-            cd ..
-
       - name: Upload build artifact for ${{ matrix.arch }}
         uses: actions/upload-artifact@v4
         with:
