@@ -217,6 +217,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           pattern: sftpgo{_,-}*{tar.xz,.rpm,.deb}
+          merge-multiple: true
 
       - name: Create pre-release
         if: ${{ contains(github.ref_name, '-pre') }}
