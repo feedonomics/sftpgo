@@ -74,8 +74,7 @@ jobs:
         run: |
           cd pkgs
           ./build.sh
-          PKG_VERSION=$(cat dist/version)
-          echo "::set-output name=pkg-version::${PKG_VERSION}"
+          echo "pkg-version=$(cat dist/version)" >> "$GITHUB_OUTPUT"
 
       - name: Upload Debian Package
         uses: actions/upload-artifact@v4
