@@ -213,26 +213,18 @@ jobs:
           echo "PKG_VERSION=${PKG_VERSION}" >> "$GITHUB_OUTPUT"
         shell: bash
 
-      - name: Download amd64 artifact
+      - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          name: sftpgo_${{ steps.get_version.outputs.SFTPGO_VERSION }}_linux_x86_64.tar.xz
-
-      - name: Download Linux bundle artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: sftpgo_${{ steps.get_version.outputs.SFTPGO_VERSION }}_linux_bundle.tar.xz
-
-      - name: Download source with deps artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: sftpgo_${{ steps.get_version.outputs.SFTPGO_VERSION }}_src_with_deps.tar.xz
+          pattern: sftpgo{_,-}*{tar.xz,.rpm,.deb}
 
       - name: Create pre-release
         if: ${{ contains(github.ref_name, '-pre') }}
         run: |
           gh release create "${SFTPGO_VERSION}" -p --latest=false
           gh release upload "${SFTPGO_VERSION}" sftpgo_*.xz --clobber
+          gh release upload "${SFTPGO_VERSION}" sftpgo_*.deb --clobber
+          gh release upload "${SFTPGO_VERSION}" sftpgo-*.rpm --clobber
           gh release view "${SFTPGO_VERSION}"
         env:
           GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
@@ -243,6 +235,8 @@ jobs:
         run: |
           gh release create "${SFTPGO_VERSION}"
           gh release upload "${SFTPGO_VERSION}" sftpgo_*.xz --clobber
+          gh release upload "${SFTPGO_VERSION}" sftpgo_*.deb --clobber
+          gh release upload "${SFTPGO_VERSION}" sftpgo-*.rpm --clobber
           gh release view "${SFTPGO_VERSION}"
         env:
           GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
