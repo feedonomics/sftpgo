@@ -163,4 +163,4 @@ jobs:
         uses: golangci/golangci-lint-action@v6
         with:
           version: latest
-        continue-on-error: true
+          only-new-issues: true
