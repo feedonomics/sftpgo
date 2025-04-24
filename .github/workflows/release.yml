@@ -182,6 +182,7 @@ jobs:
       - name: Build bundle
         shell: bash
         run: |
+          mkdir bundle
           cd bundle
           tar xvf ../sftpgo_${SFTPGO_VERSION}_linux_x86_64.tar.xz
           tar cJvf sftpgo_${SFTPGO_VERSION}_linux_bundle.tar.xz *
