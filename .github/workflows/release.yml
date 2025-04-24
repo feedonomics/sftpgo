@@ -2,25 +2,27 @@ name: Release
 
 on:
   push:
-    tags: 'v*'
+    tags:
+      - v*
 
 env:
-  GO_VERSION: 1.20.3
+  GO_VERSION: '1.20.3'
 
 jobs:
   prepare-sources-with-deps:
     name: Prepare sources with deps
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
+
       - name: Set up Go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
 
       - name: Get SFTPGo version
         id: get_version
-        run: echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
+        run: echo "VERSION=${GITHUB_REF/refs\/tags\//}" >> "$GITHUB_OUTPUT"
 
       - name: Prepare release
         run: |
@@ -31,133 +33,10 @@ jobs:
           SFTPGO_VERSION: ${{ steps.get_version.outputs.VERSION }}
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: sftpgo_${{ steps.get_version.outputs.VERSION }}_src_with_deps.tar.xz
           path: ./sftpgo_${{ steps.get_version.outputs.VERSION }}_src_with_deps.tar.xz
-          retention-days: 1
-
-  prepare-window-mac:
-    name: Prepare binaries
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [macos-latest]
-
-    steps:
-      - uses: actions/checkout@v2
-      - name: Set up Go
-        uses: actions/setup-go@v2
-        with:
-          go-version: ${{ env.GO_VERSION }}
-
-      - name: Build for macOS
-        if: startsWith(matrix.os, 'windows-') != true
-        run: CGO_ENABLED=0 go build -ldflags "-s -w -X github.com/drakkan/sftpgo/version.commit=`git describe --always --dirty` -X github.com/drakkan/sftpgo/version.date=`date -u +%FT%TZ`" -o sftpgo
-
-      - name: Build for Windows
-        if: startsWith(matrix.os, 'windows-')
-        run: |
-          $GIT_COMMIT = (git describe --always --dirty) | Out-String
-          $DATE_TIME = ([datetime]::Now.ToUniversalTime().toString("yyyy-MM-ddTHH:mm:ssZ")) | Out-String
-          go build -ldflags "-s -w -X github.com/drakkan/sftpgo/version.commit=$GIT_COMMIT -X github.com/drakkan/sftpgo/version.date=$DATE_TIME" -o sftpgo.exe
-
-      - name: Get SFTPGo version
-        id: get_version
-        run: echo ::set-output name=VERSION::${GITHUB_REF/refs\/tags\//}
-        shell: bash
-
-      - name: Get OS name
-        id: get_os_name
-        run: |
-          if [[ $MATRIX_OS =~ ^macos.* ]]
-          then
-            echo ::set-output name=OS::macOS
-          else
-            echo ::set-output name=OS::windows
-          fi
-        shell: bash
-        env:
-          MATRIX_OS: ${{ matrix.os }}
-
-      - name: Prepare Release for macOS
-        if: startsWith(matrix.os, 'macos-')
-        run: |
-          mkdir -p output/{init,sqlite,bash_completion,zsh_completion}
-          echo "For documentation please take a look here:" > output/README.txt
-          echo "" >> output/README.txt
-          echo "https://github.com/drakkan/sftpgo/blob/${SFTPGO_VERSION}/README.md" >> output/README.txt
-          cp LICENSE output/
-          cp sftpgo output/
-          cp sftpgo.json output/
-          cp -r static output/
-          cp -r templates output/
-          cp init/com.github.drakkan.sftpgo.plist output/init/
-          ./sftpgo gen completion bash > output/bash_completion/sftpgo
-          ./sftpgo gen completion zsh > output/zsh_completion/_sftpgo
-          ./sftpgo gen man -d output/man/man1
-          gzip output/man/man1/*
-          cd output
-          tar cJvf sftpgo_${SFTPGO_VERSION}_${OS}_x86_64.tar.xz *
-          cd ..
-        env:
-          SFTPGO_VERSION: ${{ steps.get_version.outputs.VERSION }}
-          OS: ${{ steps.get_os_name.outputs.OS }}
-
-      - name: Prepare Release for Windows
-        if: startsWith(matrix.os, 'windows-')
-        run: |
-          mkdir output
-          copy .\sftpgo.exe .\output
-          copy .\sftpgo.json .\output
-          copy .\LICENSE .\output\LICENSE.txt
-          mkdir output\templates
-          xcopy .\templates .\output\templates\ /E
-          mkdir output\static
-          xcopy .\static .\output\static\ /E
-          iscc windows-installer\sftpgo.iss
-        env:
-          SFTPGO_ISS_VERSION: ${{ steps.get_version.outputs.VERSION }}
-          SFTPGO_ISS_DOC_URL: https://github.com/drakkan/sftpgo/blob/${{ steps.get_version.outputs.VERSION }}/README.md
-
-      - name: Prepare Portable Release for Windows
-        if: startsWith(matrix.os, 'windows-')
-        run: |
-          mkdir win-portable
-          copy .\sftpgo.exe .\win-portable
-          copy .\sftpgo.json .\win-portable
-          copy .\LICENSE .\win-portable\LICENSE.txt
-          mkdir win-portable\templates
-          xcopy .\templates .\win-portable\templates\ /E
-          mkdir win-portable\static
-          xcopy .\static .\win-portable\static\ /E
-          Compress-Archive .\win-portable\* sftpgo_portable_x86_64.zip
-        env:
-          SFTPGO_VERSION: ${{ steps.get_version.outputs.VERSION }}
-          OS: ${{ steps.get_os_name.outputs.OS }}
-
-      - name: Upload macOS artifact
-        if: startsWith(matrix.os, 'macos-')
-        uses: actions/upload-artifact@v2
-        with:
-          name: sftpgo_${{ steps.get_version.outputs.VERSION }}_${{ steps.get_os_name.outputs.OS }}_x86_64.tar.xz
-          path: ./output/sftpgo_${{ steps.get_version.outputs.VERSION }}_${{ steps.get_os_name.outputs.OS }}_x86_64.tar.xz
-          retention-days: 1
-
-      - name: Upload Windows installer artifact
-        if: startsWith(matrix.os, 'windows-')
-        uses: actions/upload-artifact@v2
-        with:
-          name: sftpgo_${{ steps.get_version.outputs.VERSION }}_${{ steps.get_os_name.outputs.OS }}_x86_64.exe
-          path: ./sftpgo_windows_x86_64.exe
-          retention-days: 1
-
-      - name: Upload Windows portable artifact
-        if: startsWith(matrix.os, 'windows-')
-        uses: actions/upload-artifact@v2
-        with:
-          name: sftpgo_${{ steps.get_version.outputs.VERSION }}_${{ steps.get_os_name.outputs.OS }}_portable_x86_64.zip
-          path: ./sftpgo_portable_x86_64.zip
           retention-days: 1
 
   prepare-linux:
@@ -173,21 +52,19 @@ jobs:
             tar-arch: x86_64
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: Set up Go
         if: ${{ matrix.arch == 'amd64' }}
-        uses: actions/setup-go@v2
+
+        uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
 
-      - name: Get versions
+      - name: Get SFTPGo version
         id: get_version
         run: |
-          echo ::set-output name=SFTPGO_VERSION::${GITHUB_REF/refs\/tags\//}
-          echo ::set-output name=GO_VERSION::${GO_VERSION}
+          echo "SFTPGO_VERSION=${GITHUB_REF/refs\/tags\//}" >> "$GITHUB_OUTPUT"
         shell: bash
-        env:
-          GO_VERSION: ${{ env.GO_VERSION }}
 
       - name: Build on amd64
         if: ${{ matrix.arch == 'amd64' }}
@@ -213,7 +90,7 @@ jobs:
         env:
           SFTPGO_VERSION: ${{ steps.get_version.outputs.SFTPGO_VERSION }}
 
-      - uses: uraimo/run-on-arch-action@v2.0.9
+      - uses: uraimo/run-on-arch-action@v3
         if: ${{ matrix.arch != 'amd64' }}
         name: Build for ${{ matrix.arch }}
         id: build
@@ -228,7 +105,7 @@ jobs:
           install: |
             apt-get update -q -y
             apt-get install -q -y curl gcc git xz-utils
-            curl --retry 5 --retry-delay 2 --connect-timeout 10 -o go.tar.gz -L https://golang.org/dl/go${{ steps.get_version.outputs.GO_VERSION }}.linux-${{ matrix.go-arch }}.tar.gz
+            curl --retry 5 --retry-delay 2 --connect-timeout 10 -o go.tar.gz -L https://golang.org/dl/go${{ env.GO_VERSION }}.linux-${{ matrix.go-arch }}.tar.gz
             tar -C /usr/local -xzf go.tar.gz
           run: |
             export PATH=$PATH:/usr/local/go/bin
@@ -254,7 +131,7 @@ jobs:
             cd ..
 
       - name: Upload build artifact for ${{ matrix.arch }}
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: sftpgo_${{ steps.get_version.outputs.SFTPGO_VERSION }}_linux_${{ matrix.tar-arch }}.tar.xz
           path: ./output/sftpgo_${{ steps.get_version.outputs.SFTPGO_VERSION }}_linux_${{ matrix.tar-arch }}.tar.xz
@@ -267,19 +144,19 @@ jobs:
           cd pkgs
           ./build.sh
           PKG_VERSION=${SFTPGO_VERSION:1}
-          echo "::set-output name=pkg-version::${PKG_VERSION}"
+          echo "pkg-version=${PKG_VERSION}" >> "$GITHUB_OUTPUT"
         env:
           SFTPGO_VERSION: ${{ steps.get_version.outputs.SFTPGO_VERSION }}
 
       - name: Upload Deb Package
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: sftpgo_${{ steps.build_linux_pkgs.outputs.pkg-version }}-1_${{ matrix.deb-arch}}.deb
           path: ./pkgs/dist/deb/sftpgo_${{ steps.build_linux_pkgs.outputs.pkg-version }}-1_${{ matrix.deb-arch}}.deb
           retention-days: 1
 
       - name: Upload RPM Package
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: sftpgo-${{ steps.build_linux_pkgs.outputs.pkg-version }}-1.${{ matrix.rpm-arch}}.rpm
           path: ./pkgs/dist/rpm/sftpgo-${{ steps.build_linux_pkgs.outputs.pkg-version }}-1.${{ matrix.rpm-arch}}.rpm
@@ -288,24 +165,23 @@ jobs:
   prepare-linux-bundle:
     name: Prepare Linux bundle
     needs: prepare-linux
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     steps:
-      - name: Get versions
+      - name: Get SFTPGo version
         id: get_version
         run: |
-          echo ::set-output name=SFTPGO_VERSION::${GITHUB_REF/refs\/tags\//}
+          echo "SFTPGO_VERSION=${GITHUB_REF/refs\/tags\//}" >> "$GITHUB_OUTPUT"
         shell: bash
 
       - name: Download amd64 artifact
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v4
         with:
           name: sftpgo_${{ steps.get_version.outputs.SFTPGO_VERSION }}_linux_x86_64.tar.xz
 
       - name: Build bundle
         shell: bash
         run: |
-          mkdir -p bundle/{arm64,ppc64le}
           cd bundle
           tar xvf ../sftpgo_${SFTPGO_VERSION}_linux_x86_64.tar.xz
           tar cJvf sftpgo_${SFTPGO_VERSION}_linux_bundle.tar.xz *
@@ -314,7 +190,7 @@ jobs:
           SFTPGO_VERSION: ${{ steps.get_version.outputs.SFTPGO_VERSION }}
 
       - name: Upload Linux bundle
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: sftpgo_${{ steps.get_version.outputs.SFTPGO_VERSION }}_linux_bundle.tar.xz
           path: ./bundle/sftpgo_${{ steps.get_version.outputs.SFTPGO_VERSION }}_linux_bundle.tar.xz
@@ -322,47 +198,32 @@ jobs:
 
   create-release:
     name: Release
-    needs: [prepare-linux-bundle, prepare-sources-with-deps, prepare-window-mac]
-    runs-on: ubuntu-latest
+    needs: [prepare-linux-bundle, prepare-sources-with-deps]
+    runs-on: ubuntu-22.04
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: Get versions
         id: get_version
         run: |
           SFTPGO_VERSION=${GITHUB_REF/refs\/tags\//}
           PKG_VERSION=${SFTPGO_VERSION:1}
-          echo ::set-output name=SFTPGO_VERSION::${SFTPGO_VERSION}
-          echo "::set-output name=PKG_VERSION::${PKG_VERSION}"
+          echo "SFTPGO_VERSION=${SFTPGO_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "PKG_VERSION=${PKG_VERSION}" >> "$GITHUB_OUTPUT"
         shell: bash
 
       - name: Download amd64 artifact
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v4
         with:
           name: sftpgo_${{ steps.get_version.outputs.SFTPGO_VERSION }}_linux_x86_64.tar.xz
 
-#      - name: Download arm64 artifact
-#        uses: actions/download-artifact@v2
-#        with:
-#          name: sftpgo_${{ steps.get_version.outputs.SFTPGO_VERSION }}_linux_arm64.tar.xz
-#
-#      - name: Download ppc64le artifact
-#        uses: actions/download-artifact@v2
-#        with:
-#          name: sftpgo_${{ steps.get_version.outputs.SFTPGO_VERSION }}_linux_ppc64le.tar.xz
-
       - name: Download Linux bundle artifact
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v4
         with:
           name: sftpgo_${{ steps.get_version.outputs.SFTPGO_VERSION }}_linux_bundle.tar.xz
 
-      - name: Download macOS x86_64 artifact
-        uses: actions/download-artifact@v2
-        with:
-          name: sftpgo_${{ steps.get_version.outputs.SFTPGO_VERSION }}_macOS_x86_64.tar.xz
-
       - name: Download source with deps artifact
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v4
         with:
           name: sftpgo_${{ steps.get_version.outputs.SFTPGO_VERSION }}_src_with_deps.tar.xz
 
