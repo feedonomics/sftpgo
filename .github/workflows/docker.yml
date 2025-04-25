@@ -18,7 +18,7 @@ jobs:
     strategy:
       matrix:
         os:
-          - ubuntu-22.04
+          - ubuntu-latest
         docker_pkg:
           - debian
           - alpine
