@@ -22,3 +22,9 @@ sftpgo.db
 
 # coverage
 coverage.txt
+
+# docker
+conf.d/
+.env*
+compose*
+Dockerfile-test*

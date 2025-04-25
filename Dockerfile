@@ -1,4 +1,4 @@
-FROM golang:1.20.3-buster as builder
+FROM golang:1.24-bookworm AS builder
 
 ENV GOFLAGS="-mod=readonly"
 
@@ -23,7 +23,7 @@ RUN set -xe && \
     export COMMIT_SHA=${COMMIT_SHA:-$(git describe --always --dirty)} && \
     go build $(if [ -n "${FEATURES}" ]; then echo "-tags ${FEATURES}"; fi) -ldflags "-s -w -X github.com/drakkan/sftpgo/version.commit=${COMMIT_SHA} -X github.com/drakkan/sftpgo/version.date=`date -u +%FT%TZ`" -v -o sftpgo
 
-FROM debian:buster-slim
+FROM debian:bookworm-slim
 
 # Set to "true" to install the optional git and rsync dependencies
 ARG INSTALL_OPTIONAL_PACKAGES=false

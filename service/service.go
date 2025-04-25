@@ -81,8 +81,8 @@ func (s *Service) Start() error {
 	}
 	if !config.HasServicesToStart() {
 		infoString := "no service configured, nothing to do"
-		logger.Info(logSender, "", infoString)
-		logger.InfoToConsole(infoString)
+		logger.Info(logSender, "", "%s", infoString)
+		logger.InfoToConsole("%s", infoString)
 		return errors.New(infoString)
 	}
 

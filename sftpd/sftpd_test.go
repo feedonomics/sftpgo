@@ -3,6 +3,7 @@ package sftpd_test
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/sha512"
@@ -123,6 +124,7 @@ var (
 	allPerms         = []string{dataprovider.PermAny}
 	homeBasePath     string
 	scpPath          string
+	scpForce         bool
 	gitPath          string
 	sshPath          string
 	hookCmdPath      string
@@ -8551,6 +8553,9 @@ func getScpDownloadCommand(localPath, remotePath string, preserveTime, recursive
 	if recursive {
 		args = append(args, "-r")
 	}
+	if scpForce {
+		args = append(args, "-O")
+	}
 	args = append(args, "-P")
 	args = append(args, "2022")
 	args = append(args, "-o")
@@ -8576,10 +8581,17 @@ func getScpUploadCommand(localPath, remotePath string, preserveTime, remoteToRem
 			args = append(args, "-r")
 		}
 	}
+	if scpForce {
+		args = append(args, "-O")
+	}
 	args = append(args, "-P")
 	args = append(args, "2022")
 	args = append(args, "-o")
 	args = append(args, "StrictHostKeyChecking=no")
+	args = append(args, "-o")
+	args = append(args, "HostKeyAlgorithms=+ssh-rsa")
+	args = append(args, "-o")
+	args = append(args, "PubkeyAcceptedAlgorithms=+ssh-rsa")
 	args = append(args, "-i")
 	args = append(args, privateKeyPath)
 	args = append(args, localPath)
@@ -8637,6 +8649,12 @@ func checkSystemCommands() {
 		logger.Warn(logSender, "", "unable to get scp command. SCP tests will be skipped, err: %v", err)
 		logger.WarnToConsole("unable to get scp command. SCP tests will be skipped, err: %v", err)
 		scpPath = ""
+	} else {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, scpPath, "-O")
+		out, _ := cmd.CombinedOutput()
+		scpForce = !strings.Contains(string(out), "option -- O")
 	}
 }
 
@@ -8792,7 +8810,7 @@ func printLatestLogs(maxNumberOfLines int) {
 		return
 	}
 	for _, line := range lines {
-		logger.DebugToConsole(line)
+		logger.DebugToConsole("%s", line)
 	}
 }
 
