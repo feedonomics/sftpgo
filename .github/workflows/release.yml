@@ -11,7 +11,7 @@ env:
 jobs:
   prepare-sources-with-deps:
     name: Prepare sources with deps
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -41,7 +41,7 @@ jobs:
 
   prepare-linux:
     name: Prepare Linux binaries
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         include:
@@ -125,7 +125,7 @@ jobs:
   prepare-linux-bundle:
     name: Prepare Linux bundle
     needs: prepare-linux
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
 
     steps:
       - name: Get SFTPGo version
@@ -160,7 +160,7 @@ jobs:
   create-release:
     name: Release
     needs: [prepare-linux-bundle, prepare-sources-with-deps]
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
