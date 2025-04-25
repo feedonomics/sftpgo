@@ -18,7 +18,7 @@ import (
 	ftpserver "github.com/fclairamb/ftpserverlib"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
-	lumberjack "gopkg.in/natefinch/lumberjack.v2"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 const (
@@ -58,7 +58,7 @@ func (l *StdLoggerWrapper) Write(p []byte) (n int, err error) {
 		p = p[0 : n-1]
 	}
 
-	Log(LevelError, l.Sender, "", string(p))
+	Log(LevelError, l.Sender, "", "%s", p)
 	return
 }
 

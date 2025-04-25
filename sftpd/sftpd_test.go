@@ -8794,7 +8794,7 @@ func printLatestLogs(maxNumberOfLines int) {
 		return
 	}
 	for _, line := range lines {
-		logger.DebugToConsole(line)
+		logger.DebugToConsole("%s", line)
 	}
 }
 
