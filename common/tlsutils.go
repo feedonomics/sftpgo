@@ -115,7 +115,7 @@ func (m *CertManager) LoadCRLs() error {
 		}
 		crlBytes, err := os.ReadFile(revocationList)
 		if err != nil {
-			logger.Warn(m.logSender, "unable to read revocation list %#v", revocationList)
+			logger.Warn(m.logSender, "unable to read revocation list %#v", "%s", revocationList)
 			return err
 		}
 		if bytes.HasPrefix(crlBytes, pemCRLPrefix) {
@@ -126,7 +126,7 @@ func (m *CertManager) LoadCRLs() error {
 		}
 		crl, err := x509.ParseRevocationList(crlBytes)
 		if err != nil {
-			logger.Warn(m.logSender, "unable to parse revocation list %#v", revocationList)
+			logger.Warn(m.logSender, "unable to parse revocation list %#v", "%s", revocationList)
 			return err
 		}
 
