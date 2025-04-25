@@ -1,6 +1,7 @@
 FROM golang:1.24-alpine3.21 AS builder
 
 ENV GOFLAGS="-mod=readonly"
+ENV CGO_ENABLED=0
 
 RUN apk add --update --no-cache bash ca-certificates curl git gcc g++
 
@@ -26,7 +27,7 @@ RUN set -xe && \
     go build $(if [ -n "${FEATURES}" ]; then echo "-tags ${FEATURES}"; fi) -ldflags "-s -w -X github.com/drakkan/sftpgo/version.commit=${COMMIT_SHA} -X github.com/drakkan/sftpgo/version.date=`date -u +%FT%TZ`" -v -o sftpgo
 
 
-FROM alpine:3.17
+FROM alpine:3.21
 
 # Set to "true" to install the optional git and rsync dependencies
 ARG INSTALL_OPTIONAL_PACKAGES=false
