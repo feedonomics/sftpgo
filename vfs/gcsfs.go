@@ -120,10 +120,7 @@ func (fs *GCSFs) Stat(name string) (os.FileInfo, error) {
 	attrs, err := fs.headObject(name)
 	if err == nil {
 		objSize := attrs.Size
-		objectModTime := attrs.Updated
-		if !attrs.CustomTime.IsZero() {
-			objectModTime = attrs.CustomTime
-		}
+		objectModTime := customTimeOrDefault(attrs)
 		isDir := attrs.ContentType == dirMimeType || strings.HasSuffix(attrs.Name, "/")
 		return NewFileInfo(name, isDir, objSize, objectModTime, false), nil
 	}
@@ -355,10 +352,7 @@ func (fs *GCSFs) ReadDir(dirname string) ([]os.FileInfo, error) {
 	if !strings.HasSuffix(dirname, `/`) {
 		if attrs, err := fs.headObject(dirname); err == nil {
 			objSize := attrs.Size
-			objectModTime := attrs.Updated
-			if !attrs.CustomTime.IsZero() {
-				objectModTime = attrs.CustomTime
-			}
+			objectModTime := customTimeOrDefault(attrs)
 			return []os.FileInfo{NewFileInfo(dirname, false, objSize, objectModTime, false)}, nil
 		}
 	}
@@ -416,13 +410,8 @@ func (fs *GCSFs) ReadDir(dirname string) ([]os.FileInfo, error) {
 				}
 				prefixes[name] = true
 			}
-			var modTime time.Time
-			if !attrs.CustomTime.IsZero() {
-				modTime = attrs.CustomTime
-			} else {
-				modTime = attrs.Updated
-			}
-			fi := NewFileInfo(name, isDir, attrs.Size, modTime, false)
+			objectModTime := customTimeOrDefault(attrs)
+			fi := NewFileInfo(name, isDir, attrs.Size, objectModTime, false)
 			result = append(result, fi)
 		}
 	}
@@ -727,4 +716,11 @@ func (fs *GCSFs) Close() error {
 // GetAvailableDiskSize return the available size for the specified path
 func (*GCSFs) GetAvailableDiskSize(dirName string) (*sftp.StatVFS, error) {
 	return nil, ErrStorageSizeUnavailable
+}
+
+func customTimeOrDefault(attrs *storage.ObjectAttrs) time.Time {
+	if !attrs.CustomTime.IsZero() {
+		return attrs.CustomTime
+	}
+	return attrs.Updated
 }
