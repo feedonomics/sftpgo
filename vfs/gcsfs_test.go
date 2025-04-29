@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	testBaseUrl = `http://localhost/gcs-test`
+	testBaseURL = `http://localhost/gcs-test`
 )
 
 var (
@@ -35,7 +35,7 @@ func (Suite *GCSFsSuite) SetupSuite() {
 	gcsClient, err := storage.NewClient(
 		context.Background(),
 		option.WithHTTPClient(&http.Client{}),
-		option.WithEndpoint(testBaseUrl),
+		option.WithEndpoint(testBaseURL),
 	)
 	if err != nil {
 		Suite.FailNowf(`storage.NewClient`, `failed to setup storage client: %s`, err)
@@ -56,7 +56,7 @@ func (Suite *GCSFsSuite) SetupSuite() {
 func (Suite *GCSFsSuite) TestStat_NoCustomTime() {
 	defer gock.Off()
 
-	gock.New(testBaseUrl).
+	gock.New(testBaseURL).
 		Get("/b/bucket1/o/users/test1/test.txt").
 		Reply(200).
 		JSON(map[string]any{
@@ -81,7 +81,7 @@ func (Suite *GCSFsSuite) TestStat_NoCustomTime() {
 func (Suite *GCSFsSuite) TestStat_ZeroCustomTime() {
 	defer gock.Off()
 
-	gock.New(testBaseUrl).
+	gock.New(testBaseURL).
 		Get("/b/bucket1/o/users/test1/test.txt").
 		Reply(200).
 		JSON(map[string]any{
@@ -106,7 +106,7 @@ func (Suite *GCSFsSuite) TestStat_ZeroCustomTime() {
 func (Suite *GCSFsSuite) TestStat_ValidCustomTime() {
 	defer gock.Off()
 
-	gock.New(testBaseUrl).
+	gock.New(testBaseURL).
 		Get("/b/bucket1/o/users/test1/test.txt").
 		Reply(200).
 		JSON(map[string]any{
@@ -131,7 +131,7 @@ func (Suite *GCSFsSuite) TestStat_ValidCustomTime() {
 func (Suite *GCSFsSuite) TestReadDir_IsObject_NoCustomTime() {
 	defer gock.Off()
 
-	gock.New(testBaseUrl).
+	gock.New(testBaseURL).
 		Get("/b/bucket1/o/users/test1/test.txt").
 		Reply(200).
 		JSON(map[string]any{
@@ -158,7 +158,7 @@ func (Suite *GCSFsSuite) TestReadDir_IsObject_NoCustomTime() {
 func (Suite *GCSFsSuite) TestReadDir_IsObject_WithCustomTime() {
 	defer gock.Off()
 
-	gock.New(testBaseUrl).
+	gock.New(testBaseURL).
 		Get("/b/bucket1/o/users/test1/test.txt").
 		Reply(200).
 		JSON(map[string]any{
@@ -185,7 +185,7 @@ func (Suite *GCSFsSuite) TestReadDir_IsObject_WithCustomTime() {
 func (Suite *GCSFsSuite) TestReadDir_IsDir() {
 	defer gock.Off()
 
-	gock.New(testBaseUrl).
+	gock.New(testBaseURL).
 		Get("/b/bucket1/o").
 		AddMatcher(customTimeInFieldsList()).
 		Reply(200).
@@ -234,7 +234,7 @@ func (Suite *GCSFsSuite) TestCreate_CustomTimeAttribute() {
 	Suite.Fs._customTimeOverride = &jan1
 	defer func() { Suite.Fs._customTimeOverride = nil }()
 
-	gock.New(testBaseUrl).
+	gock.New(testBaseURL).
 		Post("/upload/storage/v1/b/bucket1/o").
 		AddMatcher(customTimeInUploadRequest(jan1)).
 		Reply(200)
