@@ -31,17 +31,18 @@ import (
 )
 
 var (
-	gcsDefaultFieldsSelection = []string{"Name", "Size", "Deleted", "Updated", "ContentType"}
+	gcsDefaultFieldsSelection = []string{"Name", "Size", "Deleted", "Updated", "ContentType", "CustomTime"}
 )
 
 // GCSFs is a Fs implementation for Google Cloud Storage.
 type GCSFs struct {
-	connectionID   string
-	localTempDir   string
-	config         *GCSFsConfig
-	svc            *storage.Client
-	ctxTimeout     time.Duration
-	ctxLongTimeout time.Duration
+	connectionID        string
+	localTempDir        string
+	config              *GCSFsConfig
+	svc                 *storage.Client
+	ctxTimeout          time.Duration
+	ctxLongTimeout      time.Duration
+	_customTimeOverride *time.Time // defaults to Now() if nil
 }
 
 func init() {
@@ -120,6 +121,9 @@ func (fs *GCSFs) Stat(name string) (os.FileInfo, error) {
 	if err == nil {
 		objSize := attrs.Size
 		objectModTime := attrs.Updated
+		if !attrs.CustomTime.IsZero() {
+			objectModTime = attrs.CustomTime
+		}
 		isDir := attrs.ContentType == dirMimeType || strings.HasSuffix(attrs.Name, "/")
 		return NewFileInfo(name, isDir, objSize, objectModTime, false), nil
 	}
@@ -145,6 +149,7 @@ func (fs *GCSFs) getStatCompat(name string) (os.FileInfo, error) {
 	}
 	objSize := attrs.Size
 	objectModTime := attrs.Updated
+	// NOTE: s3fs.getStatForDir() does NOT override objectModTime, so we won't override here either
 	return NewFileInfo(name, true, objSize, objectModTime, false), nil
 }
 
@@ -195,6 +200,11 @@ func (fs *GCSFs) Create(name string, flag int) (File, *PipeWriter, func(), error
 	obj := bkt.Object(name)
 	ctx, cancelFn := context.WithCancel(context.Background())
 	objectWriter := obj.NewWriter(ctx)
+	if fs._customTimeOverride != nil {
+		objectWriter.ObjectAttrs.CustomTime = *fs._customTimeOverride
+	} else {
+		objectWriter.ObjectAttrs.CustomTime = time.Now()
+	}
 	var contentType string
 	if flag == -1 {
 		contentType = dirMimeType
@@ -342,6 +352,17 @@ func (*GCSFs) Truncate(name string, size int64) error {
 // ReadDir reads the directory named by dirname and returns
 // a list of directory entries.
 func (fs *GCSFs) ReadDir(dirname string) ([]os.FileInfo, error) {
+	if !strings.HasSuffix(dirname, `/`) {
+		if attrs, err := fs.headObject(dirname); err == nil {
+			objSize := attrs.Size
+			objectModTime := attrs.Updated
+			if !attrs.CustomTime.IsZero() {
+				objectModTime = attrs.CustomTime
+			}
+			return []os.FileInfo{NewFileInfo(dirname, false, objSize, objectModTime, false)}, nil
+		}
+	}
+
 	var result []os.FileInfo
 	// dirname must be already cleaned
 	prefix := fs.getPrefix(dirname)
@@ -395,7 +416,13 @@ func (fs *GCSFs) ReadDir(dirname string) ([]os.FileInfo, error) {
 				}
 				prefixes[name] = true
 			}
-			fi := NewFileInfo(name, isDir, attrs.Size, attrs.Updated, false)
+			var modTime time.Time
+			if !attrs.CustomTime.IsZero() {
+				modTime = attrs.CustomTime
+			} else {
+				modTime = attrs.Updated
+			}
+			fi := NewFileInfo(name, isDir, attrs.Size, modTime, false)
 			result = append(result, fi)
 		}
 	}
