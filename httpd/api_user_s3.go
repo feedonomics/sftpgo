@@ -11,7 +11,7 @@ import (
 )
 
 // Deprecated: Use generic postTranslatePath instead
-// For backwards compatability this will return an error if the backend filesystem is not S3
+// For backwards compatibility this will return an error if the backend filesystem is not S3
 func userS3Translate(w http.ResponseWriter, r *http.Request) {
 	resp, err := handleTranslateRequest(r)
 	if err != nil {
