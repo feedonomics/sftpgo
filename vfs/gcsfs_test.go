@@ -229,10 +229,11 @@ func (Suite *GCSFsSuite) TestReadDir_IsDir() {
 }
 
 func (Suite *GCSFsSuite) TestCreate_CustomTimeAttribute() {
-	defer gock.Off()
-
-	Suite.Fs._customTimeOverride = &jan1
-	defer func() { Suite.Fs._customTimeOverride = nil }()
+	Suite.Fs.nowFunc = func() time.Time { return jan1 }
+	defer func() {
+		gock.Off()
+		Suite.Fs.nowFunc = time.Now
+	}()
 
 	gock.New(testBaseURL).
 		Post("/upload/storage/v1/b/bucket1/o").

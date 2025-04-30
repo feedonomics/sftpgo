@@ -36,13 +36,13 @@ var (
 
 // GCSFs is a Fs implementation for Google Cloud Storage.
 type GCSFs struct {
-	connectionID        string
-	localTempDir        string
-	config              *GCSFsConfig
-	svc                 *storage.Client
-	ctxTimeout          time.Duration
-	ctxLongTimeout      time.Duration
-	_customTimeOverride *time.Time // defaults to Now() if nil
+	connectionID   string
+	localTempDir   string
+	config         *GCSFsConfig
+	svc            *storage.Client
+	ctxTimeout     time.Duration
+	ctxLongTimeout time.Duration
+	nowFunc        func() time.Time // defaults to time.Now
 }
 
 func init() {
@@ -58,6 +58,7 @@ func NewGCSFs(connectionID, localTempDir string, config GCSFsConfig) (Fs, error)
 		config:         &config,
 		ctxTimeout:     30 * time.Second,
 		ctxLongTimeout: 300 * time.Second,
+		nowFunc:        time.Now,
 	}
 	if err = fs.config.Validate(fs.config.CredentialFile); err != nil {
 		return fs, err
@@ -197,11 +198,7 @@ func (fs *GCSFs) Create(name string, flag int) (File, *PipeWriter, func(), error
 	obj := bkt.Object(name)
 	ctx, cancelFn := context.WithCancel(context.Background())
 	objectWriter := obj.NewWriter(ctx)
-	if fs._customTimeOverride != nil {
-		objectWriter.ObjectAttrs.CustomTime = *fs._customTimeOverride
-	} else {
-		objectWriter.ObjectAttrs.CustomTime = time.Now()
-	}
+	objectWriter.ObjectAttrs.CustomTime = fs.nowFunc()
 	var contentType string
 	if flag == -1 {
 		contentType = dirMimeType
