@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/drakkan/sftpgo/httpd/s3translate"
+	"github.com/drakkan/sftpgo/httpd/translate"
 )
 
 type APIError struct {
@@ -21,8 +21,8 @@ func (err APIError) Error() string {
 }
 
 // UpdateFolderQuotaUsage updates the folder used quota limits and checks the received HTTP Status code against expectedStatusCode.
-func UsersS3Translate(request s3translate.Request, expectedStatusCode int) (s3translate.Response, error) {
-	var translated s3translate.Response
+func UsersS3Translate(request translate.Request, expectedStatusCode int) (translate.Response, error) {
+	var translated translate.Response
 	var body []byte
 
 	folderAsJSON, _ := json.Marshal(request)
