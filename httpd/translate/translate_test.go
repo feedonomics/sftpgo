@@ -1,4 +1,4 @@
-package s3translate
+package translate
 
 import (
 	"testing"
@@ -22,13 +22,6 @@ func TestRequestValidation(t *testing.T) {
 	assert.Nil(t, Req.Validate())
 }
 
-func TestResolvePathNotS3(t *testing.T) {
-	Req := Request{}
-	Resp, err := Req.ResolvePath(dataprovider.Filesystem{})
-	assert.Equal(t, Response{}, Resp)
-	assert.Equal(t, ErrFileSystemNotS3, err)
-}
-
 func TestResolvePathTransversal(t *testing.T) {
 	Req := Request{FilePath: `/../user/test.csv`}
 	Resp, err := Req.ResolvePath(dataprovider.Filesystem{
@@ -41,7 +34,7 @@ func TestResolvePathTransversal(t *testing.T) {
 	assert.Equal(t, ErrFilePathInvalid, err)
 }
 
-func TestResolvePath(t *testing.T) {
+func TestResolvePath_S3(t *testing.T) {
 	Req := Request{FilePath: `test.csv`}
 	Resp, err := Req.ResolvePath(dataprovider.Filesystem{
 		Provider: dataprovider.S3FilesystemProvider,
@@ -52,9 +45,10 @@ func TestResolvePath(t *testing.T) {
 		},
 	})
 	assert.Equal(t, Response{
-		Region: `us-east-1`,
-		Bucket: `bucket1`,
-		Key:    `/users/user1/test.csv`,
+		Provider: dataprovider.S3FilesystemProvider,
+		Region:   `us-east-1`,
+		Bucket:   `bucket1`,
+		Key:      `/users/user1/test.csv`,
 	}, Resp)
 	assert.Nil(t, err)
 }

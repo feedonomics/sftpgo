@@ -1,41 +1,31 @@
 package httpd
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/render"
 
-	"github.com/drakkan/sftpgo/common"
 	"github.com/drakkan/sftpgo/dataprovider"
-	"github.com/drakkan/sftpgo/httpd/s3translate"
+	"github.com/drakkan/sftpgo/httpd/translate"
 )
 
+// Deprecated: Use generic postTranslatePath instead
+// For backwards compatability this will return an error if the backend filesystem is not S3
 func userS3Translate(w http.ResponseWriter, r *http.Request) {
-	var req s3translate.Request
-	err := render.DecodeJSON(r.Body, &req)
+	resp, err := handleTranslateRequest(r)
 	if err != nil {
-		sendAPIResponse(w, r, err, "", http.StatusBadRequest)
-		return
-	}
-
-	if err := req.Validate(); err != nil {
-		sendAPIResponse(w, r, err, "", http.StatusBadRequest)
-		return
-	}
-
-	user, err := dataprovider.CheckUserAndPass(req.Username, req.Password, ``, common.ProtocolSSH)
-	if err != nil {
-		if err == dataprovider.ErrInvalidCredentials {
-			sendAPIResponse(w, r, err, "Access Denied", 403)
-			return
+		var apiErr apiError
+		if errors.As(err, &apiErr) {
+			sendAPIResponse(w, r, apiErr.err, apiErr.msg, apiErr.status)
+		} else {
+			sendAPIResponse(w, r, err, "", http.StatusBadRequest)
 		}
-		sendAPIResponse(w, r, err, "", getRespStatus(err))
 		return
 	}
 
-	resp, err := req.ResolvePath(user.FsConfig)
-	if err != nil {
-		sendAPIResponse(w, r, err, "", http.StatusBadRequest)
+	if resp.Provider != dataprovider.S3FilesystemProvider {
+		sendAPIResponse(w, r, translate.ErrFileSystemNotS3, "", http.StatusBadRequest)
 		return
 	}
 
