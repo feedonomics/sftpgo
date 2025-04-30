@@ -45,7 +45,7 @@ func TestResolvePath_S3(t *testing.T) {
 		},
 	})
 	assert.Equal(t, Response{
-		Provider: dataprovider.S3FilesystemProvider,
+		Provider: dataprovider.S3FilesystemProvider.String(),
 		Region:   `us-east-1`,
 		Bucket:   `bucket1`,
 		Key:      `/users/user1/test.csv`,
