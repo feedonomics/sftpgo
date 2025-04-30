@@ -34,7 +34,7 @@ func TestS3Translate(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.Equal(t, translate.Response{
-		Provider: dataprovider.S3FilesystemProvider,
+		Provider: dataprovider.S3FilesystemProvider.String(),
 		Region:   `local`,
 		Bucket:   `bucket1`,
 		Key:      `/users/test1/test.txt`,

@@ -24,7 +24,7 @@ func userS3Translate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if resp.Provider != dataprovider.S3FilesystemProvider {
+	if resp.Provider != dataprovider.S3FilesystemProvider.String() {
 		sendAPIResponse(w, r, translate.ErrFileSystemNotS3, "", http.StatusBadRequest)
 		return
 	}

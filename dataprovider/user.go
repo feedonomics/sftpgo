@@ -158,8 +158,6 @@ const (
 	AzureBlobFilesystemProvider                           // Azure Blob Storage
 	CryptedFilesystemProvider                             // Local encrypted
 	SFTPFilesystemProvider                                // SFTP
-
-	InvalidFilesystemProvider
 )
 
 func (fs FilesystemProvider) String() string {
@@ -176,35 +174,9 @@ func (fs FilesystemProvider) String() string {
 		return "local-encrypted"
 	case SFTPFilesystemProvider:
 		return "sftp"
-	case InvalidFilesystemProvider:
-		return "" // this is duplicative of default case, but is explicit so we can avoid using //nolint:exhaustive
 	default:
 		return ""
 	}
-}
-
-func (fs FilesystemProvider) MarshalText() ([]byte, error) {
-	return []byte(fs.String()), nil
-}
-
-func (fs *FilesystemProvider) UnmarshalText(b []byte) error {
-	switch string(b) {
-	case "local":
-		*fs = LocalFilesystemProvider
-	case "s3":
-		*fs = S3FilesystemProvider
-	case "gcs":
-		*fs = GCSFilesystemProvider
-	case "azure":
-		*fs = AzureBlobFilesystemProvider
-	case "local-encrypted":
-		*fs = CryptedFilesystemProvider
-	case "sftp":
-		*fs = SFTPFilesystemProvider
-	default:
-		*fs = InvalidFilesystemProvider
-	}
-	return nil
 }
 
 // Filesystem defines cloud storage filesystem details

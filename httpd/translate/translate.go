@@ -25,10 +25,10 @@ type (
 	}
 
 	Response struct {
-		Provider dataprovider.FilesystemProvider `json:"provider"`
-		Region   string                          `json:"region,omitempty"`
-		Bucket   string                          `json:"bucket"`
-		Key      string                          `json:"key"`
+		Provider string `json:"provider"`
+		Region   string `json:"region,omitempty"`
+		Bucket   string `json:"bucket"`
+		Key      string `json:"key"`
 	}
 )
 
@@ -74,7 +74,7 @@ func (req *Request) resolveS3Path(fs dataprovider.Filesystem) (Response, error) 
 		return Response{}, ErrFilePathInvalid
 	}
 	return Response{
-		Provider: fs.Provider,
+		Provider: fs.Provider.String(),
 		Region:   fs.S3Config.Region,
 		Bucket:   fs.S3Config.Bucket,
 		Key:      Key,
@@ -84,7 +84,7 @@ func (req *Request) resolveS3Path(fs dataprovider.Filesystem) (Response, error) 
 func (req *Request) resolveGCSPath(fs dataprovider.Filesystem) (Response, error) {
 	// TODO: implement me
 	return Response{
-		Provider: fs.Provider,
+		Provider: fs.Provider.String(),
 		Region:   "",
 		Bucket:   "",
 		Key:      "",
