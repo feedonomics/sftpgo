@@ -20,13 +20,20 @@ func (err APIError) Error() string {
 	return err.Message
 }
 
-// UpdateFolderQuotaUsage updates the folder used quota limits and checks the received HTTP Status code against expectedStatusCode.
 func UsersS3Translate(request translate.Request, expectedStatusCode int) (translate.Response, error) {
+	return baseTranslate(request, expectedStatusCode, `/api/v2/users-s3/translate-path`)
+}
+
+func TranslatePath(request translate.Request, expectedStatusCode int) (translate.Response, error) {
+	return baseTranslate(request, expectedStatusCode, `/api/v2/translate-path`)
+}
+
+func baseTranslate(request translate.Request, expectedStatusCode int, path string) (translate.Response, error) {
 	var translated translate.Response
 	var body []byte
 
 	folderAsJSON, _ := json.Marshal(request)
-	url := buildURLRelativeToBase(`/api/v2/users-s3/translate-path`)
+	url := buildURLRelativeToBase(path)
 	resp, err := sendHTTPRequest(http.MethodPost, url, bytes.NewBuffer(folderAsJSON), "", getDefaultToken())
 	if err != nil {
 		return translated, err
