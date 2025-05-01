@@ -65,28 +65,42 @@ func (req *Request) ResolvePath(fs dataprovider.Filesystem) (Response, error) {
 }
 
 func (req *Request) resolveS3Path(fs dataprovider.Filesystem) (Response, error) {
-	if !path.IsAbs(req.FilePath) {
-		req.FilePath = path.Clean("/" + req.FilePath)
+	key, err := req.cleanKeyPath(fs.S3Config.KeyPrefix)
+	if err != nil {
+		return Response{}, err
 	}
-	// prevent path transversal outside of users key prefix
-	Key := path.Join("/", fs.S3Config.KeyPrefix, req.FilePath)
-	if !strings.HasPrefix(Key, path.Clean(`/`+fs.S3Config.KeyPrefix)+`/`) {
-		return Response{}, ErrFilePathInvalid
-	}
+
 	return Response{
 		Provider: fs.Provider.String(),
 		Region:   fs.S3Config.Region,
 		Bucket:   fs.S3Config.Bucket,
-		Key:      Key,
+		Key:      key,
 	}, nil
 }
 
 func (req *Request) resolveGCSPath(fs dataprovider.Filesystem) (Response, error) {
-	// TODO: implement me
+	key, err := req.cleanKeyPath(fs.GCSConfig.KeyPrefix)
+	if err != nil {
+		return Response{}, err
+	}
+
 	return Response{
 		Provider: fs.Provider.String(),
-		Region:   "",
-		Bucket:   "",
-		Key:      "",
+		Bucket:   fs.GCSConfig.Bucket,
+		Key:      key,
 	}, nil
+}
+
+func (req *Request) cleanKeyPath(keyPrefix string) (string, error) {
+	if !path.IsAbs(req.FilePath) {
+		req.FilePath = path.Clean("/" + req.FilePath)
+	}
+
+	// prevent path traversal outside of user's key prefix
+	key := path.Join("/", keyPrefix, req.FilePath)
+	if !strings.HasPrefix(key, path.Clean(`/`+keyPrefix)+`/`) {
+		return "", ErrFilePathInvalid
+	}
+
+	return key, nil
 }
