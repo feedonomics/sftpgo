@@ -1181,8 +1181,39 @@ paths:
           $ref: '#/components/responses/InternalServerError'
         default:
           $ref: '#/components/responses/DefaultResponse'
+  /translate-path:
+    post:
+      tags:
+        - users
+      summary: Translate credentials and file path to object reference
+      operationId: post-users-translate-path
+      responses:
+        200:
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranslatePathResponse'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
+        404:
+          $ref: '#/components/responses/NotFound'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+        default:
+          $ref: '#/components/responses/DefaultResponse'
+      description: 'Translate a username, password, and filepath combination to the object resource path based on the user''s backend. Currently supports S3 and GCS providers.'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TranslatePathRequest'
+
   /users-s3/translate-path:
     post:
+      deprecated: true
       tags:
         - users
       summary: Translate credentials and file path to s3 reference
@@ -1193,7 +1224,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/S3TranslateResponse'
+                $ref: '#/components/schemas/TranslatePathResponse'
         401:
           $ref: '#/components/responses/Unauthorized'
         403:
@@ -1209,7 +1240,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/S3TranslateRequest'
+              $ref: '#/components/schemas/TranslatePathRequest'
 components:
   responses:
     BadRequest:
@@ -2043,7 +2074,7 @@ components:
         expires_at:
           type: string
           format: date-time
-    S3TranslateRequest:
+    TranslatePathRequest:
       type: object
       properties:
         username:
@@ -2056,9 +2087,14 @@ components:
         - username
         - password
         - filepath
-    S3TranslateResponse:
+    TranslatePathResponse:
       type: object
       properties:
+        provider:
+          type: string
+          enum:
+            - "s3"
+            - "gcs"
         region:
           type: string
         bucket:
