@@ -160,25 +160,6 @@ const (
 	SFTPFilesystemProvider                                // SFTP
 )
 
-func (fs FilesystemProvider) String() string {
-	switch fs {
-	case LocalFilesystemProvider:
-		return "local"
-	case S3FilesystemProvider:
-		return "s3"
-	case GCSFilesystemProvider:
-		return "gcs"
-	case AzureBlobFilesystemProvider:
-		return "azure"
-	case CryptedFilesystemProvider:
-		return "local-encrypted"
-	case SFTPFilesystemProvider:
-		return "sftp"
-	default:
-		return ""
-	}
-}
-
 // Filesystem defines cloud storage filesystem details
 type Filesystem struct {
 	Provider     FilesystemProvider `json:"provider"`

@@ -25,10 +25,11 @@ type (
 	}
 
 	Response struct {
-		Provider string `json:"provider"`
-		Region   string `json:"region,omitempty"`
-		Bucket   string `json:"bucket"`
-		Key      string `json:"key"`
+		RawProvider dataprovider.FilesystemProvider `json:"-"`
+		Provider    string                          `json:"provider"`
+		Region      string                          `json:"region,omitempty"`
+		Bucket      string                          `json:"bucket"`
+		Key         string                          `json:"key"`
 	}
 )
 
@@ -71,10 +72,11 @@ func (req *Request) resolveS3Path(fs dataprovider.Filesystem) (Response, error) 
 	}
 
 	return Response{
-		Provider: fs.Provider.String(),
-		Region:   fs.S3Config.Region,
-		Bucket:   fs.S3Config.Bucket,
-		Key:      key,
+		RawProvider: fs.Provider,
+		Provider:    rawProviderToString(fs.Provider),
+		Region:      fs.S3Config.Region,
+		Bucket:      fs.S3Config.Bucket,
+		Key:         key,
 	}, nil
 }
 
@@ -85,9 +87,10 @@ func (req *Request) resolveGCSPath(fs dataprovider.Filesystem) (Response, error)
 	}
 
 	return Response{
-		Provider: fs.Provider.String(),
-		Bucket:   fs.GCSConfig.Bucket,
-		Key:      key,
+		RawProvider: fs.Provider,
+		Provider:    rawProviderToString(fs.Provider),
+		Bucket:      fs.GCSConfig.Bucket,
+		Key:         key,
 	}, nil
 }
 
@@ -103,4 +106,23 @@ func (req *Request) cleanKeyPath(keyPrefix string) (string, error) {
 	}
 
 	return key, nil
+}
+
+func rawProviderToString(fsProvider dataprovider.FilesystemProvider) string {
+	switch fsProvider {
+	case dataprovider.LocalFilesystemProvider:
+		return "local"
+	case dataprovider.S3FilesystemProvider:
+		return "s3"
+	case dataprovider.GCSFilesystemProvider:
+		return "gcs"
+	case dataprovider.AzureBlobFilesystemProvider:
+		return "azure"
+	case dataprovider.CryptedFilesystemProvider:
+		return "local-encrypted"
+	case dataprovider.SFTPFilesystemProvider:
+		return "sftp"
+	default:
+		return ""
+	}
 }

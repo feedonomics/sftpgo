@@ -33,7 +33,7 @@ func TestTranslatePath(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.Equal(t, translate.Response{
-		Provider: dataprovider.GCSFilesystemProvider.String(),
+		Provider: `gcs`,
 		Bucket:   `bucket1`,
 		Key:      `/users/test1/test.txt`,
 	}, translated)
