@@ -20,6 +20,7 @@ require (
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/google/uuid v1.2.0
 	github.com/grandcat/zeroconf v1.0.0
+	github.com/h2non/gock v1.2.0
 	github.com/hashicorp/go-retryablehttp v0.6.8
 	github.com/jlaffaye/ftp v0.0.0-20201112195030-9aae4d151126
 	github.com/lestrrat-go/jwx v1.1.6
@@ -74,6 +75,7 @@ require (
 	github.com/google/go-cmp v0.5.5 // indirect
 	github.com/google/wire v0.5.0 // indirect
 	github.com/googleapis/gax-go/v2 v2.0.5 // indirect
+	github.com/h2non/parth v0.0.0-20190131123155-b4df798d6542 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
