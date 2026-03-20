@@ -28,3 +28,6 @@ conf.d/
 .env*
 compose*
 Dockerfile-test*
+
+# misc
+NOTES.md
