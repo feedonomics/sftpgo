@@ -325,9 +325,11 @@ func (*GCSFs) Truncate(name string, size int64) error {
 func (fs *GCSFs) ReadDir(dirname string) ([]os.FileInfo, error) {
 	if !strings.HasSuffix(dirname, `/`) {
 		if attrs, err := fs.headObject(dirname); err == nil {
-			objSize := attrs.Size
-			objectModTime := customTimeOrDefault(attrs)
-			return []os.FileInfo{NewFileInfo(dirname, false, objSize, objectModTime, false)}, nil
+			if !fs.isDirPlaceholderObject(attrs) {
+				objSize := attrs.Size
+				objectModTime := customTimeOrDefault(attrs)
+				return []os.FileInfo{NewFileInfo(dirname, false, objSize, objectModTime, false)}, nil
+			}
 		}
 	}
 
@@ -627,6 +629,7 @@ func (fs *GCSFs) getObjectStat(name string) (string, os.FileInfo, error) {
 	}
 	objSize := attrs.Size
 	objectModTime := attrs.Updated
+	// NOTE: s3fs.getStatForDir() does NOT override objectModTime, so we won't override here either
 	return name + "/", NewFileInfo(name, true, objSize, objectModTime, false), nil
 }
 
@@ -720,6 +723,12 @@ func (fs *GCSFs) Close() error {
 // GetAvailableDiskSize return the available size for the specified path
 func (*GCSFs) GetAvailableDiskSize(dirName string) (*sftp.StatVFS, error) {
 	return nil, ErrStorageSizeUnavailable
+}
+
+func (fs GCSFs) isDirPlaceholderObject(attrs *storage.ObjectAttrs) bool {
+	return attrs.Size == 0 &&
+		attrs.ContentType == dirMimeType &&
+		!strings.HasSuffix(attrs.Name, `/`)
 }
 
 func customTimeOrDefault(attrs *storage.ObjectAttrs) time.Time {
