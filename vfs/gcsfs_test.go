@@ -306,8 +306,9 @@ func (Suite *GCSFsSuite) TestReadDir_NoTrailingSlash_BadEmptyDir() {
 
 	results, err := Suite.Fs.ReadDir(prefix)
 	Suite.NoError(err)
-	Suite.Len(results, 1) // TODO: this is different behavior than `TestReadDir_NoTrailingSlash_GoodEmptyDir`
+	Suite.Len(results, 1)
 
+	// NOTE: this listing MUST be present for FileZilla to display empty "bad" dirs with no trailing `/` in prefix
 	Suite.Equal("bad-empty", results[0].Name())
 	Suite.Equal(int64(0), results[0].Size())
 	Suite.True(results[0].IsDir())
@@ -327,7 +328,7 @@ func (Suite *GCSFsSuite) TestReadDir_WithTrailingSlash_BadEmptyDir() {
 
 	results, err := Suite.Fs.ReadDir(prefix)
 	Suite.NoError(err)
-	Suite.Len(results, 0)
+	Suite.Empty(results)
 }
 
 func (Suite *GCSFsSuite) TestIsDirPlaceholderObject() {
