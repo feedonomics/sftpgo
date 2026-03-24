@@ -253,6 +253,8 @@ func (Suite *GCSFsSuite) TestReadDir_NoTrailingSlash_GoodEmptyDir() {
 	results, err := Suite.Fs.ReadDir(prefix)
 	Suite.NoError(err)
 	Suite.Empty(results)
+
+	Suite.True(gock.IsDone(), "pending mocks: %s", printPendingMocks())
 }
 
 func (Suite *GCSFsSuite) TestReadDir_WithTrailingSlash_GoodEmptyDir() {
@@ -280,6 +282,8 @@ func (Suite *GCSFsSuite) TestReadDir_WithTrailingSlash_GoodEmptyDir() {
 	results, err := Suite.Fs.ReadDir(prefix)
 	Suite.NoError(err)
 	Suite.Empty(results)
+
+	Suite.True(gock.IsDone(), "pending mocks: %s", printPendingMocks())
 }
 
 func (Suite *GCSFsSuite) TestReadDir_NoTrailingSlash_BadEmptyDir() {
@@ -288,7 +292,7 @@ func (Suite *GCSFsSuite) TestReadDir_NoTrailingSlash_BadEmptyDir() {
 
 	gock.New(testBaseURL).
 		Get("/b/bucket1/o").
-		MatchParam("prefix", prefix).
+		MatchParam("prefix", prefix+"/").
 		MatchParam("delimiter", "/").
 		AddMatcher(customTimeInFieldsList()).
 		Reply(200).
@@ -312,6 +316,8 @@ func (Suite *GCSFsSuite) TestReadDir_NoTrailingSlash_BadEmptyDir() {
 	Suite.Equal("bad-empty", results[0].Name())
 	Suite.Equal(int64(0), results[0].Size())
 	Suite.True(results[0].IsDir())
+
+	Suite.True(gock.IsDone(), "pending mocks: %s", printPendingMocks())
 }
 
 func (Suite *GCSFsSuite) TestReadDir_WithTrailingSlash_BadEmptyDir() {
@@ -329,6 +335,8 @@ func (Suite *GCSFsSuite) TestReadDir_WithTrailingSlash_BadEmptyDir() {
 	results, err := Suite.Fs.ReadDir(prefix)
 	Suite.NoError(err)
 	Suite.Empty(results)
+
+	Suite.True(gock.IsDone(), "pending mocks: %s", printPendingMocks())
 }
 
 func (Suite *GCSFsSuite) TestIsDirPlaceholderObject() {
