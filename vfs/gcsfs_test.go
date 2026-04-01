@@ -228,6 +228,134 @@ func (Suite *GCSFsSuite) TestReadDir_IsDir() {
 	Suite.True(gock.IsDone(), "pending mocks: %s", printPendingMocks())
 }
 
+func (Suite *GCSFsSuite) TestReadDir_NoTrailingSlash_GoodEmptyDir() {
+	defer gock.Off()
+	prefix := "users/test1/good-empty"
+
+	gock.New(testBaseURL).
+		Get("/b/bucket1/o").
+		MatchParam("prefix", prefix).
+		MatchParam("delimiter", "/").
+		AddMatcher(customTimeInFieldsList()).
+		Reply(200).
+		JSON(map[string]any{
+			"items": []map[string]any{
+				{
+					"name":        "users/test1/good-empty/",
+					"contentType": "inode/directory",
+					"size":        "0",
+					"updated":     "2026-03-23T20:53:57.499Z",
+					"customTime":  "2026-03-23T20:53:57Z",
+				},
+			},
+		})
+
+	results, err := Suite.Fs.ReadDir(prefix)
+	Suite.NoError(err)
+	Suite.Empty(results)
+
+	Suite.True(gock.IsDone(), "pending mocks: %s", printPendingMocks())
+}
+
+func (Suite *GCSFsSuite) TestReadDir_WithTrailingSlash_GoodEmptyDir() {
+	defer gock.Off()
+	prefix := "users/test1/good-empty/"
+
+	gock.New(testBaseURL).
+		Get("/b/bucket1/o").
+		MatchParam("prefix", prefix).
+		MatchParam("delimiter", "/").
+		AddMatcher(customTimeInFieldsList()).
+		Reply(200).
+		JSON(map[string]any{
+			"items": []map[string]any{
+				{
+					"name":        "users/test1/good-empty/",
+					"contentType": "inode/directory",
+					"size":        "0",
+					"updated":     "2026-03-23T20:53:57.499Z",
+					"customTime":  "2026-03-23T20:53:57Z",
+				},
+			},
+		})
+
+	results, err := Suite.Fs.ReadDir(prefix)
+	Suite.NoError(err)
+	Suite.Empty(results)
+
+	Suite.True(gock.IsDone(), "pending mocks: %s", printPendingMocks())
+}
+
+func (Suite *GCSFsSuite) TestReadDir_NoTrailingSlash_BadEmptyDir() {
+	defer gock.Off()
+	prefix := "users/test1/bad-empty"
+
+	gock.New(testBaseURL).
+		Get("/b/bucket1/o").
+		MatchParam("prefix", prefix+"/").
+		MatchParam("delimiter", "/").
+		AddMatcher(customTimeInFieldsList()).
+		Reply(200).
+		JSON(map[string]any{
+			"items": []map[string]any{
+				{
+					"name":        "users/test1/bad-empty",
+					"contentType": "inode/directory",
+					"size":        "0",
+					"updated":     "2026-03-23T20:53:57.499Z",
+					"customTime":  "2026-03-23T20:53:57Z",
+				},
+			},
+		})
+
+	results, err := Suite.Fs.ReadDir(prefix)
+	Suite.NoError(err)
+	Suite.Len(results, 1)
+
+	// NOTE: this listing MUST be present for FileZilla to display empty "bad" dirs with no trailing `/` in prefix
+	Suite.Equal("bad-empty", results[0].Name())
+	Suite.Equal(int64(0), results[0].Size())
+	Suite.True(results[0].IsDir())
+
+	Suite.True(gock.IsDone(), "pending mocks: %s", printPendingMocks())
+}
+
+func (Suite *GCSFsSuite) TestReadDir_WithTrailingSlash_BadEmptyDir() {
+	defer gock.Off()
+	prefix := "users/test1/bad-empty/"
+
+	gock.New(testBaseURL).
+		Get("/b/bucket1/o").
+		MatchParam("prefix", prefix).
+		MatchParam("delimiter", "/").
+		AddMatcher(customTimeInFieldsList()).
+		Reply(200).
+		JSON(`{}`)
+
+	results, err := Suite.Fs.ReadDir(prefix)
+	Suite.NoError(err)
+	Suite.Empty(results)
+
+	Suite.True(gock.IsDone(), "pending mocks: %s", printPendingMocks())
+}
+
+func (Suite *GCSFsSuite) TestIsDirPlaceholderObject() {
+	for _, tt := range []struct {
+		name        string
+		size        int64
+		contentType string
+		expected    bool
+	}{
+		{name: "users/test1/dir", size: 0, contentType: "inode/directory", expected: true},
+		{name: "users/test1/dir", size: 0, contentType: "text/plain", expected: false},
+		{name: "users/test1/dir", size: 999, contentType: "inode/directory", expected: false},
+		{name: "users/test1/dir/", size: 0, contentType: "inode/directory", expected: false},
+	} {
+		attrs := &storage.ObjectAttrs{Name: tt.name, ContentType: tt.contentType, Size: tt.size}
+		Suite.Equal(tt.expected, Suite.Fs.isDirPlaceholderObject(attrs))
+	}
+}
+
 func (Suite *GCSFsSuite) TestCreate_CustomTimeAttribute() {
 	Suite.Fs.nowFunc = func() time.Time { return jan1 }
 	defer func() {
